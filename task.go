@@ -2,9 +2,22 @@ package rmq
 
 import "context"
 
+type Callback func(ctx context.Context, msg *Message) (string, error)
+
 // Task 自动实例化的Task
 type Task interface {
-	Run(ctx context.Context) error
+	Run(ctx context.Context) (result string, err error)
+}
+type TaskName interface {
+	TaskName() string
+}
+
+type TaskScanner interface {
+	Scan(src []byte) error
+}
+
+type TaskValuer interface {
+	Value() ([]byte, error)
 }
 
 // OnLoad 加载时执行的方法

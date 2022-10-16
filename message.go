@@ -20,14 +20,16 @@ type Message struct {
 	Meta      Meta            `json:"meta,omitempty"`
 }
 
-func NewMsg(url string, data map[string]interface{}) *Message {
+func NewMsg(task string) *Message {
 	now := NowSecond()
 	msg := &Message{
-		Id:        uuid.NewV4().String(), // 防止消息一样，在redis 集合中变成1条
+		Id:        uuid.NewV4().String(),
+		Task:      task,
 		RunAt:     now,
 		ExpiredAt: now.Add(24 * time.Hour), // 默认24小时过期
 		CreatedAt: Now(),
 	}
+	msg.SetMeta(DefaultMeta)
 	return msg
 }
 
@@ -36,18 +38,8 @@ func (m *Message) SetMeta(meta Meta) *Message {
 	return m
 }
 
-func (m *Message) SetData(data map[string]interface{}) *Message {
+func (m *Message) SetData(data json.RawMessage) *Message {
 	m.Data = data
-	return m
-}
-
-func (m *Message) SetHeader(k, v string) *Message {
-	m.Header[k] = v
-	return m
-}
-
-func (m *Message) SetUrl(url string) *Message {
-	m.Url = url
 	return m
 }
 
@@ -98,10 +90,7 @@ func (m *Message) String() string {
 	return string(data)
 }
 
-func (m *Message) Push(ctx context.Context, q *Queue) {
-	// q.Push(ctx, m)
-}
-
-func (m *Messages) Push(ctx context.Context, q *Queue) {
-	// q.Push(ctx, []*Message(*m)...)
+func (m *Message) Push(ctx context.Context, q *Rmq) (err error) {
+	_, err = q.Push(ctx, m)
+	return
 }
