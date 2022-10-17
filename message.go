@@ -20,17 +20,62 @@ type Message struct {
 	Meta      Meta            `json:"meta,omitempty"`
 }
 
-func NewMsg(task string) *Message {
+func NewMsg() *Message {
 	now := NowSecond()
 	msg := &Message{
 		Id:        uuid.NewV4().String(),
-		Task:      task,
+		RunAt:     now,
+		ExpiredAt: now.Add(24 * time.Hour), // 默认24小时过期
+		Meta:      RetryMeta,
+		CreatedAt: Now(),
+	}
+	return msg
+}
+func NewDefaultMsg(name string, data any) *Message {
+	now := NowSecond()
+	msg := &Message{
+		Id:        uuid.NewV4().String(),
+		Task:      name,
 		RunAt:     now,
 		ExpiredAt: now.Add(24 * time.Hour), // 默认24小时过期
 		CreatedAt: Now(),
 	}
+	msg.SetData(data)
 	msg.SetMeta(DefaultMeta)
 	return msg
+}
+func NewBlankMsg() *Message {
+	now := NowSecond()
+	msg := &Message{
+		Id:        uuid.NewV4().String(),
+		RunAt:     now,
+		ExpiredAt: now.Add(24 * time.Hour), // 默认24小时过期
+		Meta:      DefaultMeta,
+		CreatedAt: Now(),
+	}
+	return msg
+}
+
+func NewMsgWithTask(task Task) *Message {
+	now := NowSecond()
+	msg := &Message{
+		Id:        uuid.NewV4().String(),
+		Task:      "",
+		RunAt:     now,
+		ExpiredAt: now.Add(24 * time.Hour), // 默认24小时过期
+		Meta:      RetryMeta,
+		CreatedAt: Now(),
+	}
+	return msg
+}
+
+func (m *Message) SetTask(task Task) *Message {
+	return m
+}
+
+func (m *Message) SetCallback(callback Callback, data any) *Message {
+	m.Data, _ = json.Marshal(data)
+	return m
 }
 
 func (m *Message) SetMeta(meta Meta) *Message {
@@ -38,7 +83,11 @@ func (m *Message) SetMeta(meta Meta) *Message {
 	return m
 }
 
-func (m *Message) SetData(data json.RawMessage) *Message {
+func (m *Message) SetData(data any) *Message {
+	m.Data, _ = json.Marshal(data)
+	return m
+}
+func (m *Message) SetRawData(data json.RawMessage) *Message {
 	m.Data = data
 	return m
 }
@@ -69,7 +118,7 @@ func (m *Message) SetTimeout(t time.Duration) *Message {
 	return m
 }
 
-func (m *Message) SetCheckRule(rule map[string]interface{}) *Message {
+func (m *Message) SetCheckRule(rule map[string]any) *Message {
 	m.Meta.CheckRule = rule
 	return m
 }

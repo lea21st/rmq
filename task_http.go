@@ -69,7 +69,7 @@ func (h *HttpTask) SetMethod(method string) *HttpTask {
 	return h
 }
 
-func (h *HttpTask) OnLoad(ctx context.Context, msg *Message) (err error) {
+func (h *HttpTask) Load(ctx context.Context, msg *Message) (err error) {
 	if err = json.Unmarshal(msg.Data, &h); err != nil {
 		return
 	}
@@ -77,7 +77,7 @@ func (h *HttpTask) OnLoad(ctx context.Context, msg *Message) (err error) {
 	return
 }
 
-func (h *HttpTask) Run(ctx context.Context) (result string, err error) {
+func (h *HttpTask) Run(ctx context.Context) (result any, err error) {
 	var (
 		req  *http.Request
 		resp *http.Response

@@ -5,18 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"runtime"
 	"sync"
 )
 
 type DefaultProcess struct {
-	Tasks    map[string]TaskInfo
+	Tasks    map[string]*TaskInfo
 	taskLock sync.RWMutex
 }
 
 func NewDefaultProcess() *DefaultProcess {
 	return &DefaultProcess{
-		Tasks:    make(map[string]TaskInfo),
+		Tasks:    make(map[string]*TaskInfo),
 		taskLock: sync.RWMutex{},
 	}
 }
@@ -24,45 +23,46 @@ func NewDefaultProcess() *DefaultProcess {
 func (p *DefaultProcess) Register(name string, task Task) {
 	p.taskLock.Lock()
 	defer p.taskLock.Unlock()
-
-	t := reflect.TypeOf(task)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	p.Tasks[name] = TaskInfo{
+	t, path := GetTaskInfo(task)
+	info := &TaskInfo{
 		Name:        name,
-		Path:        fmt.Sprintf("%s.%s", t.PkgPath(), t.Name()),
+		Path:        path,
 		ReflectType: t,
 	}
+	p.Tasks[name] = info
+	p.Tasks[path] = info
 }
 
 func (p *DefaultProcess) RegisterFunc(name string, callback Callback) {
 	p.taskLock.Lock()
 	defer p.taskLock.Unlock()
-	task := &SimpleTask{callback: callback}
-	t := reflect.TypeOf(task)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	p.Tasks[name] = TaskInfo{
+	t, path := GetTaskInfo(callback)
+	info := &TaskInfo{
 		Name:        name,
 		IsFunc:      true,
-		Path:        runtime.FuncForPC(reflect.ValueOf(callback).Pointer()).Name(),
+		Path:        path,
 		ReflectType: t,
 	}
+	p.Tasks[name] = info
+	p.Tasks[path] = info
 }
-func (p *DefaultProcess) GetTaskInfo(name string) TaskInfo {
+func (p *DefaultProcess) GetTaskInfo(name string) *TaskInfo {
 	return p.Tasks[name]
 }
 
-func (p *DefaultProcess) Run(ctx context.Context, msg *Message) (result string, err error) {
+func (p *DefaultProcess) Exec(ctx context.Context, run *TaskRuntime) (result string, err error) {
+	msg := run.Msg
+	if msg == nil {
+		err = fmt.Errorf("无法识别的任务")
+		return
+	}
+
 	info, ok := p.Tasks[msg.Task]
-	if !ok || info.ReflectType == nil {
-		err = fmt.Errorf("%s未注册", msg.Task)
+	if !ok || info == nil || info.ReflectType == nil {
+		err = fmt.Errorf("任务%s未注册", msg.Task)
 		return
 	}
 	val := reflect.New(info.ReflectType).Interface()
-
 	if !info.IsFunc {
 		// 实例化数据,如果没有实现TaskScanner，使用json尝试
 		if impl, ok := val.(TaskScanner); ok {
@@ -77,7 +77,7 @@ func (p *DefaultProcess) Run(ctx context.Context, msg *Message) (result string, 
 	}
 
 	if impl, ok := val.(OnLoad); ok {
-		if err = impl.OnLoad(ctx, msg); err != nil {
+		if err = impl.Load(ctx, msg); err != nil {
 			return
 		}
 	} else {
@@ -92,20 +92,20 @@ func (p *DefaultProcess) Run(ctx context.Context, msg *Message) (result string, 
 		err = fmt.Errorf("%s不是一个有效的task", msg.Task)
 		return
 	} else {
-		result, err = task.Run(ctx)
+		run.Result, err = task.Run(ctx)
 	}
 
 	// 执行成功事件
 	if impl, ok := task.(OnSuccess); ok && err == nil {
-		impl.OnSuccess(ctx)
+		impl.Success(ctx)
 	}
 	// 执行失败事件
 	if impl, ok := task.(OnFail); ok && err == nil {
-		impl.OnFail(ctx)
+		impl.Fail(ctx)
 	}
 	// 执行完成事件
 	if impl, ok := task.(OnComplete); ok && err == nil {
-		impl.OnComplete(ctx)
+		impl.Complete(ctx)
 	}
 	return
 }

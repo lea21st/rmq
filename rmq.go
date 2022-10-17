@@ -2,7 +2,6 @@ package rmq
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -25,9 +24,8 @@ type Rmq struct {
 	config *Config
 
 	// 队列退出信号
-	concurrentChan     chan int
-	exitQueueChan      chan int
-	exitDelayQueueChan chan int
+	concurrentChan chan int
+	msgChan        chan *Message
 
 	log Logger
 
@@ -39,17 +37,17 @@ type Rmq struct {
 	Process
 
 	// 钩子
-	Hook func()
+	Hook Hook
 }
 
 // NewRmq 创建新队列
 func NewRmq(redis *redis.Client, c *Config) *Rmq {
 	rmq := &Rmq{
-		config:             c,
-		concurrentChan:     make(chan int, c.Concurrent),
-		exitQueueChan:      make(chan int),
-		exitDelayQueueChan: make(chan int),
-		Process:            NewDefaultProcess(),
+		config:         c,
+		concurrentChan: make(chan int, c.Concurrent),
+		msgChan:        make(chan *Message),
+		Process:        NewDefaultProcess(),
+		Hook:           Hook{},
 	}
 
 	rmq.Register("simpleTask", &SimpleTask{})
@@ -72,7 +70,18 @@ func (q *Rmq) SetBroker(b Broker) {
 // 某前理论存在丢失消息的可能，所以只能用于不重要的任务
 func (q *Rmq) Start(ctx context.Context) {
 	ctx, q.exitFunc = context.WithCancel(ctx)
-	q.Broker.Start(ctx)
+	go func() {
+		for {
+			select {
+			case msg := <-q.msgChan:
+				q.TryRun(ctx, msg)
+			case <-ctx.Done():
+				q.log.Infof("队列退出")
+				return
+			}
+		}
+	}()
+	q.Broker.Start(ctx, q.msgChan)
 }
 
 // Exit 退出
@@ -84,6 +93,11 @@ func (q *Rmq) Exit() {
 
 // Push 写入消息到队列
 func (q *Rmq) Push(ctx context.Context, msg ...*Message) (v int64, err error) {
+	if q.Hook.onPush != nil {
+		if msg, err = q.Hook.onPush(ctx, msg...); err != nil {
+			return
+		}
+	}
 	v, err = q.Broker.Push(ctx, msg...)
 	return
 }
@@ -97,49 +111,52 @@ func (q *Rmq) doneConcurrent() {
 }
 
 // TryRun 解析消息，执行
-func (q *Rmq) TryRun(ctx context.Context, data string) {
-	var msg *Message
-	// 解析,这一步失败了就不要往队列扔了，要处理的话，应该扔进死信队列,这个时候消息会丢失
-	if err := json.Unmarshal([]byte(data), &msg); err != nil || msg == nil {
-		q.log.Errorf("解析队列数据异常：%s,data: %s", err, data)
-		return
-	}
-
+func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 	// 超时控制
 	var cancelFunc context.CancelFunc
 	if msg.Meta.Timeout == 0 {
 		msg.Meta.Timeout = 30
 	}
-
+	runtime := NewTaskRuntime(msg)
 	ctx, cancelFunc = context.WithTimeout(ctx, time.Duration(msg.Meta.Timeout)*time.Second)
 	go func() {
 		var err error
 		defer cancelFunc()
 		defer func() {
-			// 查看有无panic
-			if errX := recover(); errX != nil {
-				err = fmt.Errorf("任务%s panic: %v", msg.Id, errX)
+			rErr := recover()
+			if rErr == nil && runtime.RunErr == nil {
+				return
+			}
+
+			if err := recover(); err != nil {
+				runtime.Error = fmt.Errorf("任务%s panic: %v", msg.Id, err)
 				q.log.Errorf("任务%s panic: %v，将到下一个时间点重试", msg.Id, err)
 			}
-			if err == nil {
+
+			if runtime.Error == nil {
 				return
 			}
 
 			// 有错误，就重试
-			if err = q.TryRetry(ctx, msg); err != nil {
-				q.log.Errorf("任务%s重试失败,%s", msg.Id, err)
+			if runtime.Error = q.TryRetry(ctx, msg); runtime.Error != nil {
+				q.log.Errorf("任务%s重试失败,%s", msg.Id, runtime.Error)
 			} else {
 				q.log.Infof("任务%重试成功,将在%s开始重试", msg.Id, msg.RunAt.DateTime())
 			}
+			q.Hook.onRetry(ctx, runtime)
 		}()
 
 		// 执行
 		var result string
-		if result, err = q.Process.Run(ctx, msg); err != nil {
+		if result, err = q.Process.Exec(ctx, runtime); err != nil {
 			q.log.Errorf("任务%s执行失败,%s", msg.Id, err)
+			runtime.RunErr = err
+			runtime.Error = err
 			return
 		}
+		// 执行成功
 		q.log.Infof("任务%s执行成功,Result %s", msg.Id, result)
+		q.Hook.onComplete(ctx, runtime)
 		return
 	}()
 	<-ctx.Done()

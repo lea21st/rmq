@@ -13,7 +13,7 @@ type CommandTask struct {
 	callback func(ctx context.Context, msg *Message) error
 }
 
-func (s *CommandTask) Run(ctx context.Context) (result string, err error) {
+func (s *CommandTask) Run(ctx context.Context) (result any, err error) {
 	var in, out bytes.Buffer
 	cmd := exec.Command(s.Shell)
 	cmd.Stdin = &in

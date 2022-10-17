@@ -17,3 +17,20 @@ var DefaultMeta = Meta{
 	Timeout:   30,
 	TraceId:   "",
 }
+
+var RetryMeta = Meta{
+	CheckRule: nil,
+	RetryRule: []int{
+		60 * 1,
+		60 * 1,
+		60 * 2,
+		60 * 5,
+		60 * 15,
+		60 * 60,
+		60 * 60 * 3,
+	},
+	Retry:   [2]int{0, 7}, // 正常执行1次+重试7次
+	Delay:   0,
+	Timeout: 30,
+	TraceId: "",
+}

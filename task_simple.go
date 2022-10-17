@@ -9,6 +9,6 @@ type SimpleTask struct {
 	callback Callback
 }
 
-func (s *SimpleTask) Run(ctx context.Context) (string, error) {
+func (s *SimpleTask) Run(ctx context.Context) (any, error) {
 	return s.callback(ctx, s.msg)
 }
