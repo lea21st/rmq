@@ -4,24 +4,11 @@ import (
 	"context"
 	"fmt"
 	"time"
-
-	"github.com/go-redis/redis/v8"
 )
-
-type Config struct {
-	Key          string        `json:"key" toml:"key" yaml:"key"`
-	WaitDuration time.Duration `json:"wait_duration" toml:"wait_duration" yaml:"wait_duration"`
-
-	DelayKey          string        `json:"delay_key" toml:"delay_key" yaml:"delay_key"`
-	DelayWaitDuration time.Duration `json:"delay_wait_duration" yaml:"delay_wait_duration" json:"delay_wait_duration"`
-
-	Concurrent int             `json:"concurrent" toml:"concurrent" yaml:"concurrent"`  // 并行数量
-	RetryRule  []time.Duration `json:"retry_rule" toml:"retry_rule"  yaml:"retry_rule"` // 重试规则
-}
 
 type Rmq struct {
 	// 配置信息
-	config *Config
+	Concurrent int
 
 	// 队列退出信号
 	concurrentChan chan int
@@ -41,9 +28,9 @@ type Rmq struct {
 }
 
 // NewRmq 创建新队列
-func NewRmq(redis *redis.Client, c *Config) *Rmq {
+func NewRmq(broker Broker) *Rmq {
 	rmq := &Rmq{
-		config:         c,
+		Broker:         broker,
 		concurrentChan: make(chan int, c.Concurrent),
 		msgChan:        make(chan *Message),
 		Process:        NewDefaultProcess(),
@@ -70,6 +57,13 @@ func (q *Rmq) SetBroker(b Broker) {
 // 某前理论存在丢失消息的可能，所以只能用于不重要的任务
 func (q *Rmq) Start(ctx context.Context) {
 	ctx, q.exitFunc = context.WithCancel(ctx)
+
+	// before start hook
+	if impl, ok := q.Broker.(BrokerHook); ok {
+		impl.BeforeStart()
+	}
+
+	// start
 	go func() {
 		for {
 			select {
@@ -81,7 +75,11 @@ func (q *Rmq) Start(ctx context.Context) {
 			}
 		}
 	}()
-	q.Broker.Start(ctx, q.msgChan)
+
+	// after start hook
+	if impl, ok := q.Broker.(BrokerHook); ok {
+		impl.AfterStart()
+	}
 }
 
 // Exit 退出
@@ -108,6 +106,16 @@ func (q *Rmq) addConcurrent() {
 
 func (q *Rmq) doneConcurrent() {
 	<-q.concurrentChan
+}
+
+func (q *Rmq) Consumer() {
+	for {
+		ctx := context.TODO()
+		msg, err := q.Broker.Pop(ctx)
+		if err != nil {
+			time.Sleep()
+		}
+	}
 }
 
 // TryRun 解析消息，执行

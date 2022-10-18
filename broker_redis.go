@@ -3,6 +3,7 @@ package rmq
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -17,12 +18,27 @@ type RedisBrokerConfig struct {
 	DelayWaitDuration time.Duration `json:"delay_wait_duration" yaml:"delay_wait_duration" json:"delay_wait_duration"`
 }
 
+var DefaultRedisBrokerConfig = RedisBrokerConfig{
+	Key:               "rmq:queue",
+	WaitDuration:      1 * time.Second,
+	DelayKey:          "rmq:queue:delay",
+	DelayWaitDuration: 4 * time.Second,
+}
+
 type RedisBroker struct {
-	redis  *redis.Client
-	config RedisBrokerConfig
-	log    Logger
-	ctx    context.Context
-	msg    chan<- *Message
+	redis    *redis.Client
+	config   RedisBrokerConfig
+	log      Logger
+	exitChan chan int
+}
+
+func NewRedisBroker(rd *redis.Client, c RedisBrokerConfig, log Logger) *RedisBroker {
+	return &RedisBroker{
+		redis:    rd,
+		config:   c,
+		log:      log,
+		exitChan: make(chan int),
+	}
 }
 
 func (r *RedisBroker) Encode(msg *Message) ([]byte, error) {
@@ -34,17 +50,18 @@ func (r *RedisBroker) Decode(bytes []byte, msg *Message) error {
 }
 
 // Push 批量写入消息
-func (r *RedisBroker) Push(ctx context.Context, msg ...Message) (v int64, err error) {
+func (r *RedisBroker) Push(ctx context.Context, msg ...*Message) (v int64, err error) {
 	var delayMessages []*redis.Z
 	var messages []interface{}
-	for _, v := range msg {
+	for i, v := range msg {
+		data, _ := r.Encode(msg[i])
 		if v.Meta.Delay > 0 {
 			delayMessages = append(delayMessages, &redis.Z{
 				Score:  float64(v.RunAt),
-				Member: v.String(),
+				Member: string(data),
 			})
 		} else {
-			messages = append(messages, v.String())
+			messages = append(messages, string(data))
 		}
 	}
 
@@ -65,17 +82,34 @@ func (r *RedisBroker) Push(ctx context.Context, msg ...Message) (v int64, err er
 	return
 }
 
-func (r *RedisBroker) Start(ctx context.Context, ch chan<- *Message) {
-	rebootDuration := time.Minute
-	DaemonStart(rebootDuration, r.Consumer)
-	DaemonStart(rebootDuration, r.consumerDelayQueue)
+// Pop 获取message
+func (r *RedisBroker) Pop(ctx context.Context) (msg *Message, err error) {
+	// 由于一些线上禁用了BLPop命令,就用LPop
+	var data string
+	if data, err = r.redis.LPop(ctx, r.config.Key).Result(); err != nil {
+		if err == redis.Nil {
+			err = nil
+		}
+		return
+	}
+
+	if err = r.Decode([]byte(data), msg); err != nil {
+		err = fmt.Errorf("消息%s解析失败:%s", data, err)
+		return
+	}
+	return
 }
 
-// 延时队列消息处理
-func (r *RedisBroker) consumerDelayQueue() {
+func (r *RedisBroker) BeforeStart() {
+	// todo
+}
+
+func (r *RedisBroker) AfterStart() {
+	// 将异步队列的数据，写入到队列
 	for {
 		select {
-		case <-r.ctx.Done():
+		case <-r.exitChan:
+			r.log.Infof("Redis Broker exit")
 			return
 		default:
 			var err error
@@ -107,34 +141,10 @@ func (r *RedisBroker) consumerDelayQueue() {
 	}
 }
 
-// Consumer 普通队列消息处理
-func (r *RedisBroker) Consumer() {
-	for {
-		select {
-		case <-r.ctx.Done():
-			return
-		default:
-			ctx := context.TODO()
-			// 由于一些线上禁用了BLPop命令,就用LPop
-			data, err := r.redis.LPop(ctx, r.config.Key).Result()
-			if err == redis.Nil {
-				time.Sleep(r.config.WaitDuration)
-				continue
-			}
+func (r *RedisBroker) BeforeExit() {
+	// todo
+}
 
-			if err != nil {
-				r.log.Errorf("获取队列(%s)数据异常:%s，data:%s", r.config.Key, err, data)
-				time.Sleep(r.config.WaitDuration)
-				continue
-			}
-
-			// 不要使用协程
-			var msg Message
-			if err = r.Decode([]byte(data), &msg); err != nil {
-				r.log.Errorf("消息%s解析失败:%s", data, err)
-				continue
-			}
-			r.msg <- &msg
-		}
-	}
+func (r *RedisBroker) AfterExit() {
+	// todo
 }
