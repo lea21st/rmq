@@ -8,22 +8,22 @@ import (
 )
 
 func TestGetTaskInfo(t *testing.T) {
-	rType, path := GetTaskInfo(&redis.Client{})
-	fmt.Printf("rType=%+v, path=%s\n", rType, path)
+	info := register.GetTaskInfo(&redis.Client{})
+	fmt.Println(info)
 
-	rType, path = GetTaskInfo(redis.Nil)
-	fmt.Printf("rType=%+v, path=%s\n", rType, path)
+	info = register.GetTaskInfo(redis.Nil)
+	fmt.Println(info)
 
-	rType, path = GetTaskInfo(redis.NewClient)
-	fmt.Printf("rType=%+v, path=%s\n", rType, path)
+	info = register.GetTaskInfo(redis.NewClient)
+	fmt.Println(info)
 
-	rType, path = GetTaskInfo(DaemonStart)
-	fmt.Printf("rType=%+v, path=%s\n", rType, path)
+	info = register.GetTaskInfo(DaemonStart)
+	fmt.Println(info)
 
-	rType, path = GetTaskInfo(Meta{})
-	fmt.Printf("rType=%+v, path=%s\n", rType, path)
+	info = register.GetTaskInfo(Meta{})
+	fmt.Println(info)
 
-	rType, path = GetTaskInfo(&Meta{})
-	fmt.Printf("rType=%+v, path=%s\n", rType, path)
+	info = register.GetTaskInfo(&Meta{})
+	fmt.Println(info)
 
 }

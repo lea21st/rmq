@@ -3,12 +3,17 @@ package rmq
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 )
 
-type Rmq struct {
+type WorkerConfig struct {
 	// 配置信息
-	Concurrent int
+	WorkerNum    int
+	Concurrent   int
+	WaitDuration time.Duration
+}
+type Rmq struct {
 
 	// 队列退出信号
 	concurrentChan chan int
@@ -20,21 +25,28 @@ type Rmq struct {
 	exitFunc context.CancelFunc
 
 	// 执行引擎
-	Broker Broker
-	Process
+	broker  Broker
+	process Process
 
 	// 钩子
-	Hook Hook
+	Hook *Hook
+
+	// 注册器
+	register *Register
+
+	workerWg sync.WaitGroup
 }
 
 // NewRmq 创建新队列
-func NewRmq(broker Broker) *Rmq {
+func NewRmq(broker Broker, logger Logger) *Rmq {
 	rmq := &Rmq{
-		Broker:         broker,
-		concurrentChan: make(chan int, c.Concurrent),
-		msgChan:        make(chan *Message),
-		Process:        NewDefaultProcess(),
-		Hook:           Hook{},
+		broker:   broker,
+		process:  NewDefaultProcess(),
+		Hook:     &Hook{},
+		msgChan:  make(chan *Message),
+		workerWg: sync.WaitGroup{},
+		register: &register,
+		log:      logger,
 	}
 
 	rmq.Register("simpleTask", &SimpleTask{})
@@ -43,41 +55,69 @@ func NewRmq(broker Broker) *Rmq {
 	return rmq
 }
 
+func (q *Rmq) Register(name string, task Task) {
+	q.register.Register(name, task)
+}
+
+func (q *Rmq) RegisterFunc(name string, callback Callback) {
+	q.register.Register(name, callback)
+}
+
 // SetProcess 自定义处理引擎
 func (q *Rmq) SetProcess(p Process) {
-	q.Process = p
+	q.process = p
 }
 
 // SetBroker 自定义处理引擎
 func (q *Rmq) SetBroker(b Broker) {
-	q.Broker = b
+	q.broker = b
 }
 
-// Start 线上是多容器的，不用多个协程并发跑,只要加pod就行
+// StartWorker 线上是多容器的，不用多个协程并发跑,只要加pod就行
 // 某前理论存在丢失消息的可能，所以只能用于不重要的任务
-func (q *Rmq) Start(ctx context.Context) {
+func (q *Rmq) StartWorker(c *WorkerConfig) {
+	ctx := context.Background()
 	ctx, q.exitFunc = context.WithCancel(ctx)
 
-	// before start hook
-	if impl, ok := q.Broker.(BrokerHook); ok {
+	// before start Hook
+	if impl, ok := q.broker.(BrokerHook); ok {
 		impl.BeforeStart()
 	}
 
 	// start
-	go func() {
-		for {
-			select {
-			case msg := <-q.msgChan:
-				q.TryRun(ctx, msg)
-			case <-ctx.Done():
-				q.log.Infof("队列退出")
-				return
+	q.workerWg.Add(c.WorkerNum * c.Concurrent)
+	for i := 0; i < c.WorkerNum; i++ {
+		go func(workerId int) {
+			fmt.Printf("rmq worker-%d start", workerId)
+			for {
+				select {
+				case <-ctx.Done():
+					q.log.Infof("rmq worker-%d exit", workerId)
+					return
+				default:
+					func() {
+						q.workerWg.Add(1)
+						ctx := context.TODO()
+						var msg *Message
+						var err error
+						if msg, err = q.broker.Pop(ctx); err != nil {
+							q.log.Errorf("获取消息失败：", err)
+						}
+						fmt.Println("msg", msg, err)
+						if msg == nil {
+							q.workerWg.Done()
+							time.Sleep(1 * time.Second)
+							return
+						}
+						q.TryRun(ctx, msg)
+					}()
+				}
 			}
-		}
-	}()
+		}(i)
+	}
 
-	// after start hook
-	if impl, ok := q.Broker.(BrokerHook); ok {
+	// after start Hook
+	if impl, ok := q.broker.(BrokerHook); ok {
 		impl.AfterStart()
 	}
 }
@@ -86,6 +126,7 @@ func (q *Rmq) Start(ctx context.Context) {
 func (q *Rmq) Exit() {
 	q.log.Infof("rmq 开始退出")
 	q.exitFunc()
+	q.workerWg.Wait()
 	q.log.Infof("rmq 退出成功")
 }
 
@@ -96,7 +137,7 @@ func (q *Rmq) Push(ctx context.Context, msg ...*Message) (v int64, err error) {
 			return
 		}
 	}
-	v, err = q.Broker.Push(ctx, msg...)
+	v, err = q.broker.Push(ctx, msg...)
 	return
 }
 
@@ -108,24 +149,21 @@ func (q *Rmq) doneConcurrent() {
 	<-q.concurrentChan
 }
 
-func (q *Rmq) Consumer() {
-	for {
-		ctx := context.TODO()
-		msg, err := q.Broker.Pop(ctx)
-		if err != nil {
-			time.Sleep()
-		}
-	}
-}
-
 // TryRun 解析消息，执行
 func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
-	// 超时控制
+	defer q.workerWg.Done()
 	var cancelFunc context.CancelFunc
 	if msg.Meta.Timeout == 0 {
 		msg.Meta.Timeout = 30
 	}
+
 	runtime := NewTaskRuntime(msg)
+
+	// run Hook
+	if q.Hook.onRun != nil {
+		q.Hook.onRun(ctx, runtime)
+	}
+
 	ctx, cancelFunc = context.WithTimeout(ctx, time.Duration(msg.Meta.Timeout)*time.Second)
 	go func() {
 		var err error
@@ -149,14 +187,19 @@ func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 			if runtime.Error = q.TryRetry(ctx, msg); runtime.Error != nil {
 				q.log.Errorf("任务%s重试失败,%s", msg.Id, runtime.Error)
 			} else {
-				q.log.Infof("任务%重试成功,将在%s开始重试", msg.Id, msg.RunAt.DateTime())
+				q.log.Infof("任务%s重试成功,将在%s开始重试", msg.Id, msg.RunAt.DateTime())
 			}
-			q.Hook.onRetry(ctx, runtime)
+
+			// retry Hook
+			if q.Hook.onRetry != nil {
+				q.Hook.onRetry(ctx, runtime)
+			}
+
 		}()
 
 		// 执行
 		var result string
-		if result, err = q.Process.Exec(ctx, runtime); err != nil {
+		if result, err = q.process.Exec(ctx, runtime); err != nil {
 			q.log.Errorf("任务%s执行失败,%s", msg.Id, err)
 			runtime.RunErr = err
 			runtime.Error = err
@@ -164,7 +207,11 @@ func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 		}
 		// 执行成功
 		q.log.Infof("任务%s执行成功,Result %s", msg.Id, result)
-		q.Hook.onComplete(ctx, runtime)
+
+		// completed Hook
+		if q.Hook.onComplete != nil {
+			q.Hook.onComplete(ctx, runtime)
+		}
 		return
 	}()
 	<-ctx.Done()

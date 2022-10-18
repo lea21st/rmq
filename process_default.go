@@ -20,36 +20,6 @@ func NewDefaultProcess() *DefaultProcess {
 	}
 }
 
-func (p *DefaultProcess) Register(name string, task Task) {
-	p.taskLock.Lock()
-	defer p.taskLock.Unlock()
-	t, path := GetTaskInfo(task)
-	info := &TaskInfo{
-		Name:        name,
-		Path:        path,
-		ReflectType: t,
-	}
-	p.Tasks[name] = info
-	p.Tasks[path] = info
-}
-
-func (p *DefaultProcess) RegisterFunc(name string, callback Callback) {
-	p.taskLock.Lock()
-	defer p.taskLock.Unlock()
-	t, path := GetTaskInfo(callback)
-	info := &TaskInfo{
-		Name:        name,
-		IsFunc:      true,
-		Path:        path,
-		ReflectType: t,
-	}
-	p.Tasks[name] = info
-	p.Tasks[path] = info
-}
-func (p *DefaultProcess) GetTaskInfo(name string) *TaskInfo {
-	return p.Tasks[name]
-}
-
 func (p *DefaultProcess) Exec(ctx context.Context, run *TaskRuntime) (result string, err error) {
 	msg := run.Msg
 	if msg == nil {

@@ -6,7 +6,7 @@ import (
 
 type Broker interface {
 	Encode(*Message) ([]byte, error)
-	Decode([]byte, *Message) error
+	Decode(bytes []byte) (msg *Message, err error)
 
 	Push(context.Context, ...*Message) (int64, error)
 	Pop(ctx context.Context) (msg *Message, err error)

@@ -45,8 +45,9 @@ func (r *RedisBroker) Encode(msg *Message) ([]byte, error) {
 	return json.Marshal(msg)
 }
 
-func (r *RedisBroker) Decode(bytes []byte, msg *Message) error {
-	return json.Unmarshal(bytes, msg)
+func (r *RedisBroker) Decode(bytes []byte) (msg *Message, err error) {
+	err = json.Unmarshal(bytes, &msg)
+	return
 }
 
 // Push 批量写入消息
@@ -73,7 +74,7 @@ func (r *RedisBroker) Push(ctx context.Context, msg ...*Message) (v int64, err e
 		}
 	}
 	if len(messages) > 0 {
-		v2, err2 := r.redis.RPush(ctx, r.config.DelayKey, messages...).Result()
+		v2, err2 := r.redis.RPush(ctx, r.config.Key, messages...).Result()
 		v += v2
 		if err2 != nil {
 			err = err2
@@ -93,7 +94,7 @@ func (r *RedisBroker) Pop(ctx context.Context) (msg *Message, err error) {
 		return
 	}
 
-	if err = r.Decode([]byte(data), msg); err != nil {
+	if msg, err = r.Decode([]byte(data)); err != nil {
 		err = fmt.Errorf("消息%s解析失败:%s", data, err)
 		return
 	}
@@ -109,7 +110,7 @@ func (r *RedisBroker) AfterStart() {
 	for {
 		select {
 		case <-r.exitChan:
-			r.log.Infof("Redis Broker exit")
+			r.log.Infof("Redis broker exit")
 			return
 		default:
 			var err error
@@ -130,7 +131,6 @@ func (r *RedisBroker) AfterStart() {
 
 			// 并行执行
 			for _, v := range members {
-				// 不要使用协程
 				if r.redis.ZRem(ctx, r.config.DelayKey, v.Member).Val() > 0 {
 					if _, err = r.redis.RPush(ctx, r.config.Key, v.Member.(string)).Result(); err != nil {
 						r.log.Errorf("队列数据写入失败:%s,Data: %s", err, v.Member)

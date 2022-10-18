@@ -1,7 +1,7 @@
 package main
 
 import (
-	"context"
+	"fmt"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/lea21st/rmq"
@@ -17,9 +17,5 @@ func main() {
 	log := rmq.DefaultLog
 	broker := rmq.NewRedisBroker(rdb, rmq.DefaultRedisBrokerConfig, log)
 	queue := rmq.NewRmq(broker)
-
-	ctx, exitFuc := context.WithCancel(context.TODO())
-	defer exitFuc()
-	queue.Start(ctx)
-
+	fmt.Println(queue)
 }

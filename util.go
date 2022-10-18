@@ -1,10 +1,7 @@
 package rmq
 
 import (
-	"fmt"
 	"log"
-	"reflect"
-	"runtime"
 	"runtime/debug"
 	"time"
 )
@@ -21,18 +18,4 @@ func DaemonStart(rebootDuration time.Duration, action func()) {
 		}
 	}()
 	action()
-}
-
-func GetTaskInfo(v any) (rType reflect.Type, path string) {
-	t := reflect.TypeOf(v)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	if t.Kind() == reflect.Func {
-		path = runtime.FuncForPC(reflect.ValueOf(v).Pointer()).Name()
-	} else {
-		path = fmt.Sprintf("%s.%s", t.PkgPath(), t.Name())
-	}
-	rType = t
-	return
 }
