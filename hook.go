@@ -2,30 +2,25 @@ package rmq
 
 import "context"
 
-type HookFunc func(ctx context.Context, runtime *TaskRuntime)
 type Hook struct {
 	onPush     func(ctx context.Context, msg ...*Message) ([]*Message, error)
-	onRun      HookFunc
-	onRetry    HookFunc
-	onComplete HookFunc
+	onContext  func(ctx context.Context) context.Context
+	onRun      func(ctx context.Context, runtime *TaskRuntime) error
+	onComplete func(ctx context.Context, runtime *TaskRuntime) error
 }
 
 func (h *Hook) OnPush(v func(ctx context.Context, msg ...*Message) ([]*Message, error)) {
 	h.onPush = v
 }
 
-func (h *Hook) OnRun(v HookFunc) {
+func (h *Hook) OnContext(v func(ctx context.Context) context.Context) {
+	h.onContext = v
+}
+
+func (h *Hook) OnRun(v func(ctx context.Context, runtime *TaskRuntime) error) {
 	h.onRun = v
 }
 
-func (h *Hook) OnRetry(v HookFunc) {
-	h.onRetry = v
-}
-
-func (h *Hook) OnComplete(v HookFunc) {
+func (h *Hook) OnComplete(v func(ctx context.Context, runtime *TaskRuntime) error) {
 	h.onComplete = v
-}
-
-func (h *Hook) Protect() {
-
 }

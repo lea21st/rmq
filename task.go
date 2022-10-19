@@ -6,6 +6,7 @@ type Callback func(ctx context.Context, msg *Message) (string, error)
 
 // Task 自动实例化的Task
 type Task interface {
+	TaskName() string
 	Run(ctx context.Context) (result any, err error)
 }
 type TaskName interface {

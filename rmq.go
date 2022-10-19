@@ -3,6 +3,8 @@ package rmq
 import (
 	"context"
 	"fmt"
+	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -16,8 +18,7 @@ type WorkerConfig struct {
 type Rmq struct {
 
 	// 队列退出信号
-	concurrentChan chan int
-	msgChan        chan *Message
+	concurrentChan chan struct{}
 
 	log Logger
 
@@ -31,9 +32,6 @@ type Rmq struct {
 	// 钩子
 	Hook *Hook
 
-	// 注册器
-	register *Register
-
 	workerWg sync.WaitGroup
 }
 
@@ -43,24 +41,26 @@ func NewRmq(broker Broker, logger Logger) *Rmq {
 		broker:   broker,
 		process:  NewDefaultProcess(),
 		Hook:     &Hook{},
-		msgChan:  make(chan *Message),
 		workerWg: sync.WaitGroup{},
-		register: &register,
 		log:      logger,
 	}
-
-	rmq.Register("simpleTask", &SimpleTask{})
-	rmq.Register("commandTask", &CommandTask{})
-	rmq.Register("httpTask", &HttpTask{})
+	// 注册自带的task
+	rmq.Register(&CommandTask{}, &HttpTask{})
 	return rmq
 }
 
-func (q *Rmq) Register(name string, task Task) {
-	q.register.Register(name, task)
+func (q *Rmq) RegisterFunc(name string, callback Callback) {
+	register.RegisterFunc(name, callback)
 }
 
-func (q *Rmq) RegisterFunc(name string, callback Callback) {
-	q.register.Register(name, callback)
+func (q *Rmq) Register(task ...Task) {
+	for i := range task {
+		register.Register(task[i])
+	}
+}
+
+func (q *Rmq) Tasks() map[string]*TaskInfo {
+	return register.AllTask()
 }
 
 // SetProcess 自定义处理引擎
@@ -73,6 +73,18 @@ func (q *Rmq) SetBroker(b Broker) {
 	q.broker = b
 }
 
+func (q *Rmq) setConcurrent(num int) {
+	q.concurrentChan = make(chan struct{}, num)
+}
+
+func (q *Rmq) addConcurrent() {
+	q.concurrentChan <- struct{}{}
+}
+
+func (q *Rmq) doneConcurrent() {
+	<-q.concurrentChan
+}
+
 // StartWorker 线上是多容器的，不用多个协程并发跑,只要加pod就行
 // 某前理论存在丢失消息的可能，所以只能用于不重要的任务
 func (q *Rmq) StartWorker(c *WorkerConfig) {
@@ -80,53 +92,98 @@ func (q *Rmq) StartWorker(c *WorkerConfig) {
 	ctx, q.exitFunc = context.WithCancel(ctx)
 
 	// before start Hook
-	if impl, ok := q.broker.(BrokerHook); ok {
-		impl.BeforeStart()
+	if impl, ok := q.broker.(BrokerBeforeStart); ok {
+		if err := BrokerHookProtect(ctx, impl.BeforeStart); err != nil {
+			q.log.Errorf("broker before start hook exec fail ,err:%s", err)
+		}
 	}
 
 	// start
-	q.workerWg.Add(c.WorkerNum * c.Concurrent)
+	q.setConcurrent(c.Concurrent)
 	for i := 0; i < c.WorkerNum; i++ {
-		go func(workerId int) {
-			fmt.Printf("rmq worker-%d start", workerId)
-			for {
-				select {
-				case <-ctx.Done():
-					q.log.Infof("rmq worker-%d exit", workerId)
-					return
-				default:
-					func() {
-						q.workerWg.Add(1)
-						ctx := context.TODO()
-						var msg *Message
-						var err error
-						if msg, err = q.broker.Pop(ctx); err != nil {
-							q.log.Errorf("获取消息失败：", err)
-						}
-						fmt.Println("msg", msg, err)
-						if msg == nil {
-							q.workerWg.Done()
-							time.Sleep(1 * time.Second)
-							return
-						}
-						q.TryRun(ctx, msg)
-					}()
+		go func(ctx context.Context, workerId int) {
+			defer func() {
+				if err := recover(); err != nil {
+					debug.PrintStack()
+					log.Printf("任务异常:%s,将在%s后重启", err, time.Minute)
+					// 等一会重启
+					time.AfterFunc(time.Minute, func() {
+						q.startWorker(ctx, workerId)
+					})
 				}
-			}
-		}(i)
+			}()
+			q.startWorker(ctx, workerId)
+		}(ctx, i)
 	}
 
 	// after start Hook
-	if impl, ok := q.broker.(BrokerHook); ok {
-		impl.AfterStart()
+	if impl, ok := q.broker.(BrokerAfterStart); ok {
+		if err := BrokerHookProtect(ctx, impl.AfterStart); err != nil {
+			q.log.Errorf("broker after start hook exec fail ,err:%s", err)
+		}
+	}
+}
+
+func (q *Rmq) startWorker(ctx context.Context, workerId int) {
+	q.log.Infof("rmq worker-%d started", workerId)
+	for {
+		select {
+		case <-ctx.Done():
+			q.log.Infof("rmq worker-%d exited", workerId)
+			return
+		default:
+			func() {
+				q.addConcurrent()
+				ctx := context.TODO()
+				var msg *Message
+				if msg, _ = q.broker.Pop(ctx); msg == nil {
+					q.doneConcurrent()
+					time.Sleep(1 * time.Second)
+					return
+				}
+
+				// 开始执行任务
+				go func(ctx context.Context, msg *Message) {
+					q.workerWg.Add(1)
+					defer q.workerWg.Done()
+					defer q.doneConcurrent()
+					q.TryRun(ctx, msg)
+				}(ctx, msg)
+			}()
+		}
 	}
 }
 
 // Exit 退出
 func (q *Rmq) Exit() {
 	q.log.Infof("rmq 开始退出")
+
+	// broker
+	if impl, ok := q.broker.(BrokerBeforeExit); ok {
+		if err := Protect(func() error {
+			return impl.BeforeExit(context.TODO())
+		}); err != nil {
+			q.log.Errorf("BrokerBeforeExit 执行失败,err:%s", err)
+		}
+	}
+
 	q.exitFunc()
+	q.log.Infof("rmq 已停止消费消息")
+	for len(q.concurrentChan) > 0 {
+		q.log.Infof("rmq 正在等待%d个任务执行结束", len(q.concurrentChan))
+		time.Sleep(time.Second)
+	}
 	q.workerWg.Wait()
+	q.log.Infof("rmq 所有任务已执行完成")
+
+	// broker
+	if impl, ok := q.broker.(BrokerAfterExit); ok {
+		if err := Protect(func() error {
+			return impl.AfterExit(context.TODO())
+		}); err != nil {
+			q.log.Errorf("BrokerBeforeExit 执行失败,err:%s", err)
+		}
+	}
 	q.log.Infof("rmq 退出成功")
 }
 
@@ -141,80 +198,65 @@ func (q *Rmq) Push(ctx context.Context, msg ...*Message) (v int64, err error) {
 	return
 }
 
-func (q *Rmq) addConcurrent() {
-	q.concurrentChan <- 1
-}
-
-func (q *Rmq) doneConcurrent() {
-	<-q.concurrentChan
-}
-
 // TryRun 解析消息，执行
 func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
-	defer q.workerWg.Done()
-	var cancelFunc context.CancelFunc
-	if msg.Meta.Timeout == 0 {
-		msg.Meta.Timeout = 30
-	}
+	taskRuntime := NewTaskRuntime(msg)
 
-	runtime := NewTaskRuntime(msg)
-
-	// run Hook
-	if q.Hook.onRun != nil {
-		q.Hook.onRun(ctx, runtime)
-	}
-
-	ctx, cancelFunc = context.WithTimeout(ctx, time.Duration(msg.Meta.Timeout)*time.Second)
-	go func() {
-		var err error
-		defer cancelFunc()
-		defer func() {
-			rErr := recover()
-			if rErr == nil && runtime.RunErr == nil {
-				return
+	// 完成 hook
+	defer func() {
+		// complete Hook
+		if q.Hook.onComplete != nil {
+			if err := Protect(func() error {
+				return q.Hook.onComplete(ctx, taskRuntime)
+			}); err != nil {
+				q.log.Errorf("Hook.onComplete 执行失败,任务ID: %s,error: %s", msg.Id, err)
 			}
+		}
+	}()
 
-			if err := recover(); err != nil {
-				runtime.Error = fmt.Errorf("任务%s panic: %v", msg.Id, err)
-				q.log.Errorf("任务%s panic: %v，将到下一个时间点重试", msg.Id, err)
-			}
-
-			if runtime.Error == nil {
-				return
-			}
-
-			// 有错误，就重试
-			if runtime.Error = q.TryRetry(ctx, msg); runtime.Error != nil {
-				q.log.Errorf("任务%s重试失败,%s", msg.Id, runtime.Error)
+	// 失败重试
+	defer func() {
+		// 失败重试
+		if taskRuntime.TaskError != nil {
+			taskRuntime.Error = taskRuntime.TaskError
+			// 重试
+			if taskRuntime.Error = q.TryRetry(ctx, msg); taskRuntime.Error != nil {
+				q.log.Errorf("任务%s[%d/%d]重试失败,%s", msg.Id, msg.Meta.Retry[0], msg.Meta.Retry[1], taskRuntime.Error)
 			} else {
-				q.log.Infof("任务%s重试成功,将在%s开始重试", msg.Id, msg.RunAt.DateTime())
+				q.log.Infof("任务%s[%d/%d]重试成功,将在%s开始重试", msg.Id, msg.Meta.Retry[0], msg.Meta.Retry[1], msg.RunAt.DateTime())
 			}
+		}
+	}()
 
-			// retry Hook
-			if q.Hook.onRetry != nil {
-				q.Hook.onRetry(ctx, runtime)
-			}
+	if q.Hook.onContext != nil {
+		if err := Protect(func() error {
+			ctx = q.Hook.onContext(ctx)
+			return nil
+		}); err != nil {
+			q.log.Errorf("Hook.onContext 执行失败,任务ID: %s,error: %s", msg.Id, err)
+		}
+	}
 
-		}()
-
-		// 执行
-		var result string
-		if result, err = q.process.Exec(ctx, runtime); err != nil {
-			q.log.Errorf("任务%s执行失败,%s", msg.Id, err)
-			runtime.RunErr = err
-			runtime.Error = err
+	// run Hook ,注意执行失败，将不加继续执行下去
+	if q.Hook.onRun != nil {
+		if err := Protect(func() error {
+			return q.Hook.onRun(ctx, taskRuntime)
+		}); err != nil {
+			taskRuntime.TaskError = err // 这个也需要重试
+			q.log.Errorf("Hook.onRun 执行失败,任务ID: %s,error: %s", msg.Id, err)
 			return
 		}
-		// 执行成功
-		q.log.Infof("任务%s执行成功,Result %s", msg.Id, result)
+	}
 
-		// completed Hook
-		if q.Hook.onComplete != nil {
-			q.Hook.onComplete(ctx, runtime)
-		}
+	// 执行
+	if taskRuntime.TaskError = Protect(func() error {
+		return q.process.Exec(ctx, taskRuntime)
+	}); taskRuntime.TaskError != nil {
 		return
-	}()
-	<-ctx.Done()
+	}
+
+	q.log.Infof("任务%s执行成功,Result %v", msg.Id, taskRuntime.Result)
+
 }
 
 // TryRetry 尝试重试

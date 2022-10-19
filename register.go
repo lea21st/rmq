@@ -3,51 +3,61 @@ package rmq
 import (
 	"fmt"
 	"reflect"
-	"runtime"
 	"sync"
 )
 
 type Register struct {
-	cache map[any]*TaskInfo
+	cache map[string]*TaskInfo
 	sync.RWMutex
 }
 
-var register = Register{
-	cache:   make(map[any]*TaskInfo),
+var register = &Register{
+	cache:   make(map[string]*TaskInfo),
 	RWMutex: sync.RWMutex{},
 }
 
-func getType(v any) (t reflect.Type) {
-	t = reflect.TypeOf(v)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
+func (r *Register) CreateTask(name string) (task Task, err error) {
+	var v *TaskInfo
+	var ok bool
+	if v, ok = r.cache[name]; !ok {
+		err = fmt.Errorf("任务%s未注册", name)
+		return
+	}
+	if v.IsCallback {
+		task = NewFuncTask(v.Name, v.Callback)
+		return
+	}
+	if task, ok = reflect.New(v.ReflectType).Interface().(Task); !ok {
+		err = fmt.Errorf("任务%s不是一个有效的Task", name)
+		return
 	}
 	return
 }
-
-func (r *Register) GetTaskInfo(task any) *TaskInfo {
-	t := getType(task)
-	return r.cache[t]
-}
-
-func (r *Register) Register(name string, v any) {
+func (r *Register) Register(v Task) {
 	r.Lock()
 	defer r.Unlock()
-	t := getType(v)
-	var path string
-	if t.Kind() == reflect.Func {
-		path = runtime.FuncForPC(reflect.ValueOf(v).Pointer()).Name()
-	} else {
-		path = fmt.Sprintf("%s.%s", t.PkgPath(), t.Name())
+	t := reflect.TypeOf(v)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
 	}
-
-	info := &TaskInfo{
-		Name:        name,
-		Path:        path,
+	r.cache[v.TaskName()] = &TaskInfo{
+		Name:        v.TaskName(),
+		IsCallback:  false,
 		ReflectType: t,
-		IsFunc:      t.Kind() == reflect.Func,
+		Callback:    nil,
 	}
-	r.cache[t] = info
-	r.cache[name] = info
-	r.cache[path] = info
+}
+
+func (r *Register) RegisterFunc(name string, callback Callback) {
+	r.Lock()
+	defer r.Unlock()
+	r.cache[name] = &TaskInfo{
+		Name:       name,
+		IsCallback: true,
+		Callback:   callback,
+	}
+}
+
+func (r *Register) AllTask() map[string]*TaskInfo {
+	return r.cache
 }

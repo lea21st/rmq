@@ -48,6 +48,10 @@ func NewHttpTaskPostPostForm(url string, data url.Values) *HttpTask {
 	}
 }
 
+func (h *HttpTask) TaskName() string {
+	return "httpTask"
+}
+
 func (h *HttpTask) SetHeaders(headers map[string]string) *HttpTask {
 	for k, v := range headers {
 		h.Header[k] = v
@@ -83,7 +87,7 @@ func (h *HttpTask) Run(ctx context.Context) (result any, err error) {
 		resp *http.Response
 		body []byte
 	)
-	if req, err = http.NewRequest(h.Method, h.Url, bytes.NewReader(h.Body)); err != nil {
+	if req, err = http.NewRequestWithContext(ctx, h.Method, h.Url, bytes.NewReader(h.Body)); err != nil {
 		return
 	}
 

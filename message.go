@@ -3,7 +3,6 @@ package rmq
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
@@ -71,23 +70,14 @@ func NewMsgWithTask(task Task) *Message {
 }
 
 func (m *Message) SetTask(task Task) (message *Message, err error) {
-	var info *TaskInfo
-	if info = register.GetTaskInfo(task); info == nil {
-		err = fmt.Errorf("任务未注册")
-		return
-	}
-	m.Task = info.Name
+	m.Task = task.TaskName()
 	m.Data, err = json.Marshal(task)
 	message = m
 	return
 }
 
-func (m *Message) SetCallback(callback Callback, data any) (msg *Message, err error) {
-	var info *TaskInfo
-	if info = register.GetTaskInfo(callback); info == nil {
-		return m, fmt.Errorf("任务未注册")
-	}
-	m.Task = info.Name
+func (m *Message) SetCallback(callbackName string, data any) (msg *Message, err error) {
+	m.Task = callbackName
 	m.Data, err = json.Marshal(data)
 	msg = m
 	return

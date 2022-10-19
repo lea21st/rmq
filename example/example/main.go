@@ -17,11 +17,15 @@ var queue *rmq.Rmq
 func main() {
 	Init()
 	queue.StartWorker(&rmq.WorkerConfig{
-		WorkerNum:    1,
-		Concurrent:   2,
+		WorkerNum:    2,
+		Concurrent:   20,
 		WaitDuration: time.Second,
 	})
 	// defer queue.Exit()
+
+	time.AfterFunc(20*time.Second, func() {
+		queue.Exit()
+	})
 
 	fmt.Println("111")
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -42,9 +46,21 @@ func Init() {
 	log := rmq.DefaultLog
 	broker := rmq.NewRedisBroker(rdb, rmq.DefaultRedisBrokerConfig, log)
 	queue = rmq.NewRmq(broker, log)
-	queue.RegisterFunc("测试", Test)
+	queue.RegisterFunc("test1", Test1)
+	queue.RegisterFunc("test2", Test2)
+	queue.Register(&TestTask{})
 
-	queue.Hook.OnRun(func(ctx context.Context, r *rmq.TaskRuntime) {
+	queue.Hook.OnRun(func(ctx context.Context, r *rmq.TaskRuntime) error {
 		fmt.Println("协程数量:", runtime.NumGoroutine())
+		return nil
+	})
+
+	queue.Hook.OnComplete(func(ctx context.Context, r *rmq.TaskRuntime) error {
+		fmt.Println("协程数量:", runtime.NumGoroutine())
+		return nil
+	})
+
+	queue.Hook.OnContext(func(ctx context.Context) context.Context {
+		return context.WithValue(ctx, "x", 1)
 	})
 }

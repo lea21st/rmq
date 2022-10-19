@@ -101,50 +101,56 @@ func (r *RedisBroker) Pop(ctx context.Context) (msg *Message, err error) {
 	return
 }
 
-func (r *RedisBroker) BeforeStart() {
+func (r *RedisBroker) BeforeStart(ctx context.Context) error {
 	// todo
+	return nil
 }
 
-func (r *RedisBroker) AfterStart() {
+func (r *RedisBroker) AfterStart(ctx context.Context) error {
 	// 将异步队列的数据，写入到队列
-	for {
-		select {
-		case <-r.exitChan:
-			r.log.Infof("Redis broker exit")
-			return
-		default:
-			var err error
-			var members []redis.Z
-			ctx := context.TODO()
-			if members, err = r.redis.ZRangeByScoreWithScores(ctx, r.config.DelayKey, &redis.ZRangeBy{
-				Min:    "0",
-				Max:    strconv.Itoa(int(Now())),
-				Offset: 0,
-				Count:  10,
-			}).Result(); err != nil || len(members) == 0 {
-				if err != nil {
-					r.log.Errorf("获取队列(%s)数据异常:%s", r.config.DelayKey, err)
-				}
-				time.Sleep(r.config.DelayWaitDuration)
-				continue
-			}
-
-			// 并行执行
-			for _, v := range members {
-				if r.redis.ZRem(ctx, r.config.DelayKey, v.Member).Val() > 0 {
-					if _, err = r.redis.RPush(ctx, r.config.Key, v.Member.(string)).Result(); err != nil {
-						r.log.Errorf("队列数据写入失败:%s,Data: %s", err, v.Member)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				func() {
+					var err error
+					var members []redis.Z
+					ctx := context.TODO()
+					if members, err = r.redis.ZRangeByScoreWithScores(ctx, r.config.DelayKey, &redis.ZRangeBy{
+						Min:    "0",
+						Max:    strconv.Itoa(int(Now())),
+						Offset: 0,
+						Count:  10,
+					}).Result(); err != nil || len(members) == 0 {
+						if err != nil {
+							r.log.Errorf("获取队列(%s)数据异常,%s", r.config.DelayKey, err)
+						}
+						time.Sleep(r.config.DelayWaitDuration)
+						return
 					}
-				}
+					// 并行执行
+					for _, v := range members {
+						if r.redis.ZRem(ctx, r.config.DelayKey, v.Member).Val() > 0 {
+							if _, err = r.redis.RPush(ctx, r.config.Key, v.Member.(string)).Result(); err != nil {
+								r.log.Errorf("队列数据写入失败:%s,Data: %s", err, v.Member)
+							}
+						}
+					}
+				}()
 			}
 		}
-	}
+	}()
+	return nil
 }
 
-func (r *RedisBroker) BeforeExit() {
-	// todo
+func (r *RedisBroker) BeforeExit(ctx context.Context) error {
+	r.log.Infof("RedisBroker 正在退出")
+	return nil
 }
 
-func (r *RedisBroker) AfterExit() {
-	// todo
+func (r *RedisBroker) AfterExit(ctx context.Context) error {
+	r.log.Infof("RedisBroker 已经退出")
+	return nil
 }

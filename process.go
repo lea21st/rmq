@@ -7,11 +7,11 @@ import (
 
 type TaskInfo struct {
 	Name        string
-	Path        string
-	IsFunc      bool
+	IsCallback  bool
 	ReflectType reflect.Type
+	Callback    Callback
 }
 
 type Process interface {
-	Exec(ctx context.Context, msg *TaskRuntime) (result string, err error)
+	Exec(ctx context.Context, msg *TaskRuntime) (err error)
 }
