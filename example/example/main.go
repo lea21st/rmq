@@ -18,20 +18,18 @@ func main() {
 	Init()
 	queue.StartWorker(&rmq.WorkerConfig{
 		WorkerNum:    2,
-		Concurrent:   20,
+		Concurrent:   200,
 		WaitDuration: time.Second,
 	})
 	// defer queue.Exit()
 
-	time.AfterFunc(20*time.Second, func() {
-		queue.Exit()
-	})
+	// time.AfterFunc(20*time.Second, func() {
+	// 	queue.Exit()
+	// })
 
-	fmt.Println("111")
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})
-	fmt.Println("1")
 	err := http.ListenAndServe(":8080", nil)
 	fmt.Println(err)
 }
@@ -51,12 +49,12 @@ func Init() {
 	queue.Register(&TestTask{})
 
 	queue.Hook.OnRun(func(ctx context.Context, r *rmq.TaskRuntime) error {
-		fmt.Println("协程数量:", runtime.NumGoroutine())
+		fmt.Println("任务开始:", runtime.NumGoroutine())
 		return nil
 	})
 
 	queue.Hook.OnComplete(func(ctx context.Context, r *rmq.TaskRuntime) error {
-		fmt.Println("协程数量:", runtime.NumGoroutine())
+		fmt.Println("任务结束:", runtime.NumGoroutine())
 		return nil
 	})
 

@@ -19,9 +19,9 @@ type HttpTask struct {
 	msg    *Message
 }
 
-func NewHttpTaskGet(url string) *HttpTask {
+func NewHttpTaskGet(format string, arg ...any) *HttpTask {
 	return &HttpTask{
-		Url:    url,
+		Url:    fmt.Sprintf(format, arg...),
 		Method: http.MethodGet,
 	}
 }
@@ -48,10 +48,6 @@ func NewHttpTaskPostPostForm(url string, data url.Values) *HttpTask {
 	}
 }
 
-func (h *HttpTask) TaskName() string {
-	return "httpTask"
-}
-
 func (h *HttpTask) SetHeaders(headers map[string]string) *HttpTask {
 	for k, v := range headers {
 		h.Header[k] = v
@@ -73,10 +69,20 @@ func (h *HttpTask) SetMethod(method string) *HttpTask {
 	return h
 }
 
+func (h *HttpTask) Message() (msg *Message, err error) {
+	msg, err = NewMsg().SetTask(h)
+	return
+}
+
+func (h *HttpTask) TaskName() string {
+	return "httpTask"
+}
+
+func (h *HttpTask) Scan(src []byte) (err error) {
+	return json.Unmarshal(src, &h)
+}
+
 func (h *HttpTask) Load(ctx context.Context, msg *Message) (err error) {
-	if err = json.Unmarshal(msg.Data, &h); err != nil {
-		return
-	}
 	h.msg = msg
 	return
 }
@@ -105,6 +111,6 @@ func (h *HttpTask) Run(ctx context.Context) (result any, err error) {
 	if resp.StatusCode != 200 {
 		err = fmt.Errorf("请求失败：%s", string(body))
 	}
-	result = string(body)
+	result = body
 	return
 }

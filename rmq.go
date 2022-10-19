@@ -201,6 +201,11 @@ func (q *Rmq) Push(ctx context.Context, msg ...*Message) (v int64, err error) {
 // TryRun 解析消息，执行
 func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 	taskRuntime := NewTaskRuntime(msg)
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println(err)
+		}
+	}()
 
 	// 完成 hook
 	defer func() {
@@ -266,8 +271,9 @@ func (q *Rmq) TryRetry(ctx context.Context, msg *Message) (err error) {
 		return
 	}
 
-	msg.Meta.Retry[0]++
-	index := msg.Meta.Retry[0] - 1
+	retry := msg.Meta.Retry[0]
+	retry++
+	index := retry - 1
 	if index >= len(msg.Meta.RetryRule) {
 		index = len(msg.Meta.RetryRule) - 1 // 没有规则取最后一个
 	}
@@ -278,6 +284,10 @@ func (q *Rmq) TryRetry(ctx context.Context, msg *Message) (err error) {
 		err = fmt.Errorf("任务在下个时间点重试将过期，取消重试，过期时间%s", msg.ExpiredAt.DateTime())
 		return
 	}
-	_, err = q.Push(ctx, msg)
+
+	// 成功后更新重试次数
+	if _, err = q.Push(ctx, msg); err != nil {
+		msg.Meta.Retry[0] = retry
+	}
 	return
 }

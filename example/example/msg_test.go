@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/lea21st/rmq"
 )
@@ -14,7 +15,7 @@ func TestTest(t *testing.T) {
 	data, _ := json.Marshal(queue.Tasks())
 	fmt.Println(string(data))
 	ctx := context.TODO()
-	for i := 0; i < 10000; i++ {
+	for i := 1; i < 20; i++ {
 		// if msg, err := rmq.NewMsg().SetCallback(fmt.Sprintf("test%d", i%2+1), map[string]any{
 		// 	"a": 1,
 		// 	"b": 2,
@@ -26,10 +27,15 @@ func TestTest(t *testing.T) {
 		// 	fmt.Printf("%s\n", err)
 		// }
 
-		msg, _ := rmq.NewMsg().SetTask(&TestTask{
+		msg, _ := rmq.NewMsg().SetTimeout(3 * time.Second).SetTask(&TestTask{
 			Name: fmt.Sprintf("testTask-%d", i),
 			Val:  i * i,
 		})
 		_, _ = queue.Push(ctx, msg)
+
+		// msg, _ = rmq.NewHttpTaskJsonPost("https://www.baidu.com/s?ie=UTF-8&wd=baidu", map[string]any{}).Message()
+		// _, _ = queue.Push(ctx, msg)
+		// msg, _ := rmq.NewHttpTaskGet("https://www.baidu.com/s?ie=UTF-8&wd=%d", i).Message()
+		// _, _ = queue.Push(ctx, msg)
 	}
 }

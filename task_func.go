@@ -11,7 +11,7 @@ type FuncTask struct {
 	taskName string
 }
 
-func NewFuncTask(name string, callback Callback) *FuncTask {
+func newFuncTask(name string, callback Callback) *FuncTask {
 	return &FuncTask{
 		callback: callback,
 		taskName: name,

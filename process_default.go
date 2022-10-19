@@ -2,6 +2,7 @@ package rmq
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 )
 
@@ -21,14 +22,21 @@ func (p *DefaultProcess) Exec(ctx context.Context, run *TaskRuntime) (err error)
 	}
 
 	var task Task
-	if task, err = p.CreateTask(run.Msg.Task); err != nil {
+	var taskInfo *TaskInfo
+	if task, taskInfo, err = p.CreateTask(run.Msg.Task); err != nil {
 		return
 	}
 
 	// 实例化数据,如果没有实现TaskScanner，使用json尝试
-	if impl, ok := task.(TaskScanner); ok {
-		if err = impl.Scan(msg.Data); err != nil {
-			return
+	if !taskInfo.IsCallback {
+		if impl, ok := task.(TaskScanner); ok {
+			if err = impl.Scan(msg.Data); err != nil {
+				return
+			}
+		} else {
+			if err = json.Unmarshal(run.Msg.Data, task); err != nil {
+				return
+			}
 		}
 	}
 

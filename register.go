@@ -16,15 +16,14 @@ var register = &Register{
 	RWMutex: sync.RWMutex{},
 }
 
-func (r *Register) CreateTask(name string) (task Task, err error) {
-	var v *TaskInfo
+func (r *Register) CreateTask(name string) (task Task, v *TaskInfo, err error) {
 	var ok bool
 	if v, ok = r.cache[name]; !ok {
 		err = fmt.Errorf("任务%s未注册", name)
 		return
 	}
 	if v.IsCallback {
-		task = NewFuncTask(v.Name, v.Callback)
+		task = newFuncTask(v.Name, v.Callback)
 		return
 	}
 	if task, ok = reflect.New(v.ReflectType).Interface().(Task); !ok {

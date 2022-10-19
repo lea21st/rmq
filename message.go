@@ -71,7 +71,11 @@ func NewMsgWithTask(task Task) *Message {
 
 func (m *Message) SetTask(task Task) (message *Message, err error) {
 	m.Task = task.TaskName()
-	m.Data, err = json.Marshal(task)
+	if impl, ok := task.(TaskValuer); ok {
+		m.Data, err = impl.Value()
+	} else {
+		m.Data, err = json.Marshal(task)
+	}
 	message = m
 	return
 }
