@@ -11,9 +11,8 @@ import (
 
 type WorkerConfig struct {
 	// 配置信息
-	WorkerNum    int
-	Concurrent   int
-	WaitDuration time.Duration
+	WorkerNum  int
+	Concurrent int
 }
 type Rmq struct {
 
