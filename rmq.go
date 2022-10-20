@@ -201,6 +201,7 @@ func (q *Rmq) Push(ctx context.Context, msg ...*Message) (v int64, err error) {
 func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 	taskRuntime := NewTaskRuntime(msg)
 	taskRuntime.StartTime = time.Now()
+	q.log.Infof("任务%s开始执行, Id:%s", msg.Task, msg.Id)
 
 	// 完成 hook
 	defer func() {
@@ -248,7 +249,7 @@ func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 			return q.Hook.onRun(ctx, taskRuntime)
 		}); err != nil {
 			taskRuntime.TaskError = err // 这个也需要重试
-			q.log.Errorf("Hook.onRun 执行失败, Id: %s,Error: %s", msg.Id, err)
+			q.log.Errorf("Hook.onRun 执行失败，任务将取消执行, Id: %s,Error: %s", msg.Id, err)
 			return
 		}
 	}
