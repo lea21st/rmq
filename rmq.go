@@ -201,10 +201,6 @@ func (q *Rmq) Push(ctx context.Context, msg ...*Message) (v int64, err error) {
 func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 	taskRuntime := NewTaskRuntime(msg)
 	taskRuntime.StartTime = time.Now()
-	defer func() {
-		taskRuntime.EndTime = time.Now()
-		taskRuntime.Duration = taskRuntime.EndTime.Sub(taskRuntime.StartTime)
-	}()
 
 	// 完成 hook
 	defer func() {
@@ -213,9 +209,14 @@ func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 			if err := Protect(func() error {
 				return q.Hook.onComplete(ctx, taskRuntime)
 			}); err != nil {
-				q.log.Errorf("Hook.onComplete 执行失败,任务ID: %s,error: %s", msg.Id, err)
+				q.log.Errorf("Hook.onComplete 执行失败,Id: %s, Error: %s", msg.Id, err)
 			}
 		}
+	}()
+
+	defer func() {
+		taskRuntime.EndTime = time.Now()
+		taskRuntime.Duration = taskRuntime.EndTime.Sub(taskRuntime.StartTime)
 	}()
 
 	// 失败重试
@@ -225,9 +226,9 @@ func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 			taskRuntime.Error = taskRuntime.TaskError
 			// 重试
 			if taskRuntime.Error = q.TryRetry(ctx, msg); taskRuntime.Error != nil {
-				q.log.Errorf("任务%s[%d/%d]重试失败,%s", msg.Id, msg.Meta.Retry[0], msg.Meta.Retry[1], taskRuntime.Error)
+				q.log.Errorf("任务%s[%d/%d]重试失败, Id:%s, Error:%s", msg.Task, msg.Meta.Retry[0], msg.Meta.Retry[1], msg.Id, taskRuntime.Error)
 			} else {
-				q.log.Infof("任务%s[%d/%d]重试成功,将在%s开始重试", msg.Id, msg.Meta.Retry[0], msg.Meta.Retry[1], msg.RunAt.DateTime())
+				q.log.Infof("任务%s[%d/%d]重试成功,Id:%s, 将在%s开始重试", msg.Task, msg.Meta.Retry[0], msg.Meta.Retry[1], msg.Id, msg.RunAt.DateTime())
 			}
 		}
 	}()
@@ -237,7 +238,7 @@ func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 			ctx = q.Hook.onContext(ctx, taskRuntime)
 			return nil
 		}); err != nil {
-			q.log.Errorf("Hook.onContext 执行失败,任务ID: %s,error: %s", msg.Id, err)
+			q.log.Errorf("Hook.onContext 执行失败, Id: %s, Error: %s", msg.Id, err)
 		}
 	}
 
@@ -247,7 +248,7 @@ func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 			return q.Hook.onRun(ctx, taskRuntime)
 		}); err != nil {
 			taskRuntime.TaskError = err // 这个也需要重试
-			q.log.Errorf("Hook.onRun 执行失败,任务ID: %s,error: %s", msg.Id, err)
+			q.log.Errorf("Hook.onRun 执行失败, Id: %s,Error: %s", msg.Id, err)
 			return
 		}
 	}
@@ -259,7 +260,7 @@ func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 		return
 	}
 
-	q.log.Infof("任务%s执行成功,Result %v", msg.Id, taskRuntime.Result)
+	q.log.Infof("任务%s执行成功, Id:%s, Result: %s", msg.Task, msg.Id, taskRuntime.Result)
 
 }
 
