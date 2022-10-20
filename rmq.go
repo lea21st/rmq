@@ -201,11 +201,6 @@ func (q *Rmq) Push(ctx context.Context, msg ...*Message) (v int64, err error) {
 // TryRun 解析消息，执行
 func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 	taskRuntime := NewTaskRuntime(msg)
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Println(err)
-		}
-	}()
 
 	// 完成 hook
 	defer func() {
@@ -235,7 +230,7 @@ func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 
 	if q.Hook.onContext != nil {
 		if err := Protect(func() error {
-			ctx = q.Hook.onContext(ctx)
+			ctx = q.Hook.onContext(ctx, taskRuntime)
 			return nil
 		}); err != nil {
 			q.log.Errorf("Hook.onContext 执行失败,任务ID: %s,error: %s", msg.Id, err)

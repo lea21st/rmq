@@ -4,7 +4,7 @@ import "context"
 
 type Hook struct {
 	onPush     func(ctx context.Context, msg ...*Message) ([]*Message, error)
-	onContext  func(ctx context.Context) context.Context
+	onContext  func(ctx context.Context, runtime *TaskRuntime) context.Context
 	onRun      func(ctx context.Context, runtime *TaskRuntime) error
 	onComplete func(ctx context.Context, runtime *TaskRuntime) error
 }
@@ -13,7 +13,7 @@ func (h *Hook) OnPush(v func(ctx context.Context, msg ...*Message) ([]*Message, 
 	h.onPush = v
 }
 
-func (h *Hook) OnContext(v func(ctx context.Context) context.Context) {
+func (h *Hook) OnContext(v func(ctx context.Context, runtime *TaskRuntime) context.Context) {
 	h.onContext = v
 }
 

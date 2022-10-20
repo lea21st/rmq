@@ -18,7 +18,7 @@ func main() {
 	Init()
 	queue.StartWorker(&rmq.WorkerConfig{
 		WorkerNum:    2,
-		Concurrent:   200,
+		Concurrent:   2,
 		WaitDuration: time.Second,
 	})
 	// defer queue.Exit()
@@ -50,15 +50,17 @@ func Init() {
 
 	queue.Hook.OnRun(func(ctx context.Context, r *rmq.TaskRuntime) error {
 		fmt.Println("任务开始:", runtime.NumGoroutine())
+		panic("rmq onRun")
 		return nil
 	})
 
 	queue.Hook.OnComplete(func(ctx context.Context, r *rmq.TaskRuntime) error {
 		fmt.Println("任务结束:", runtime.NumGoroutine())
+		panic("rmq OnComplete")
 		return nil
 	})
 
-	queue.Hook.OnContext(func(ctx context.Context) context.Context {
-		return context.WithValue(ctx, "x", 1)
+	queue.Hook.OnContext(func(ctx context.Context, msg *rmq.TaskRuntime) context.Context {
+		return context.WithValue(ctx, "x", msg.Msg.Meta.TraceId)
 	})
 }

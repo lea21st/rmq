@@ -34,11 +34,13 @@ func (t *TestTask) Success(ctx context.Context) {
 func (t *TestTask) Fail(ctx context.Context) {
 	// TODO implement me
 	fmt.Println(t.Name, "Fail hook")
+	panic("fail")
 }
 
 func (t *TestTask) Complete(ctx context.Context) {
 	// TODO implement me
 	fmt.Println(t.Name, "Complete hook")
+	panic("complete")
 }
 
 func (t *TestTask) TaskName() string {
@@ -48,5 +50,6 @@ func (t *TestTask) TaskName() string {
 
 func (t *TestTask) Run(ctx context.Context) (result any, err error) {
 	fmt.Println("xxxxx", t.Val, t.Name)
+	panic("Run")
 	return "fail", fmt.Errorf("error")
 }
