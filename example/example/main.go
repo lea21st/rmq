@@ -6,7 +6,6 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"runtime"
-	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/lea21st/rmq"
@@ -17,9 +16,8 @@ var queue *rmq.Rmq
 func main() {
 	Init()
 	queue.StartWorker(&rmq.WorkerConfig{
-		WorkerNum:    2,
-		Concurrent:   2,
-		WaitDuration: time.Second,
+		WorkerNum:  2,
+		Concurrent: 2,
 	})
 	// defer queue.Exit()
 

@@ -173,7 +173,7 @@ func (q *Rmq) Exit() {
 		time.Sleep(time.Second)
 	}
 	q.workerWg.Wait()
-	q.log.Infof("rmq 所有任务已执行完成")
+	q.log.Infof("rmq 所有任务均已执行完成")
 
 	// broker
 	if impl, ok := q.broker.(BrokerAfterExit); ok {
@@ -201,7 +201,7 @@ func (q *Rmq) Push(ctx context.Context, msg ...*Message) (v int64, err error) {
 func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 	taskRuntime := NewTaskRuntime(msg)
 	taskRuntime.StartTime = time.Now()
-	q.log.Infof("任务%s开始执行, Id:%s", msg.Task, msg.Id)
+	q.log.Infof("任务%s开始执行, Id:%s,Data: %s", msg.Task, msg.Id, string(msg.Data))
 
 	// 完成 hook
 	defer func() {

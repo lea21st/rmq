@@ -21,25 +21,25 @@ type Message struct {
 }
 
 func NewMsg() *Message {
-	now := NowSecond()
+	now := Now()
 	msg := &Message{
 		Id:        uuid.NewV4().String(),
 		RunAt:     now,
 		ExpiredAt: now.Add(24 * time.Hour), // 默认24小时过期
 		Meta:      RetryMeta,
-		CreatedAt: Now(),
+		CreatedAt: now,
 	}
 	return msg
 }
 
 func NewBlankMsg() *Message {
-	now := NowSecond()
+	now := Now()
 	msg := &Message{
 		Id:        uuid.NewV4().String(),
 		RunAt:     now,
 		ExpiredAt: now.Add(24 * time.Hour), // 默认24小时过期
 		Meta:      DefaultMeta,
-		CreatedAt: Now(),
+		CreatedAt: now,
 	}
 	return msg
 }
@@ -115,7 +115,7 @@ func (m *Message) SetTraceId(traceId string) *Message {
 
 func (m *Message) TryRetry(delay time.Duration) *Message {
 	m.Meta.Delay = int(delay.Seconds())
-	m.RunAt = NowSecond().Add(delay)
+	m.RunAt = Now().Add(delay)
 	return m
 }
 

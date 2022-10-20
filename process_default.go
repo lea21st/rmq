@@ -31,10 +31,12 @@ func (p *DefaultProcess) Exec(ctx context.Context, run *TaskRuntime) (err error)
 	if !taskInfo.IsCallback {
 		if impl, ok := task.(TaskScanner); ok {
 			if err = impl.Scan(msg.Data); err != nil {
+				err = fmt.Errorf("scan error: %s", err)
 				return
 			}
 		} else {
 			if err = json.Unmarshal(run.Msg.Data, task); err != nil {
+				err = fmt.Errorf("scan error: %s", err)
 				return
 			}
 		}
@@ -42,12 +44,15 @@ func (p *DefaultProcess) Exec(ctx context.Context, run *TaskRuntime) (err error)
 
 	if impl, ok := task.(OnLoad); ok {
 		if err = impl.Load(ctx, msg); err != nil {
+			err = fmt.Errorf("task load error: %s", err)
 			return
 		}
 	}
 
 	// 执行
-	run.Result, err = task.Run(ctx)
+	if run.Result, err = task.Run(ctx); err != nil {
+		err = fmt.Errorf("task run error: %s", err)
+	}
 
 	// 执行成功事件
 	if impl, ok := task.(OnSuccess); ok && err == nil {

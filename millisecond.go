@@ -24,10 +24,6 @@ func Now() Millisecond {
 	return CreateMillisecond(time.Now())
 }
 
-func NowSecond() Millisecond {
-	return Millisecond(time.Now().Unix() * 1e3)
-}
-
 func CreateMillisecond(t time.Time) Millisecond {
 	return Millisecond(t.UnixMilli())
 }
