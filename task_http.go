@@ -87,7 +87,7 @@ func (h *HttpTask) Load(ctx context.Context, msg *Message) (err error) {
 	return
 }
 
-func (h *HttpTask) Run(ctx context.Context) (result any, err error) {
+func (h *HttpTask) Run(ctx context.Context) (result string, err error) {
 	var (
 		req  *http.Request
 		resp *http.Response
@@ -111,6 +111,6 @@ func (h *HttpTask) Run(ctx context.Context) (result any, err error) {
 	if resp.StatusCode != 200 {
 		err = fmt.Errorf("请求失败：%s", string(body))
 	}
-	result = body
+	result = string(body)
 	return
 }

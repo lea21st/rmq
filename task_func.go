@@ -26,7 +26,7 @@ func (s *FuncTask) Load(ctx context.Context, msg *Message) error {
 	return nil
 }
 
-func (s *FuncTask) Run(ctx context.Context) (any, error) {
+func (s *FuncTask) Run(ctx context.Context) (string, error) {
 	if s.callback == nil {
 		fmt.Println("callb", s.msg)
 	}

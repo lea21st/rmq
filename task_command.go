@@ -17,7 +17,7 @@ func (c *CommandTask) TaskName() string {
 	return "commandTask"
 }
 
-func (c *CommandTask) Run(ctx context.Context) (result any, err error) {
+func (c *CommandTask) Run(ctx context.Context) (result string, err error) {
 	var in, out bytes.Buffer
 	cmd := exec.CommandContext(ctx, c.Shell)
 	cmd.Stdin = &in

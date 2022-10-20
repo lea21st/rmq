@@ -201,6 +201,11 @@ func (q *Rmq) Push(ctx context.Context, msg ...*Message) (v int64, err error) {
 // TryRun 解析消息，执行
 func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 	taskRuntime := NewTaskRuntime(msg)
+	taskRuntime.StartTime = time.Now()
+	defer func() {
+		taskRuntime.EndTime = time.Now()
+		taskRuntime.Duration = taskRuntime.EndTime.Sub(taskRuntime.StartTime)
+	}()
 
 	// 完成 hook
 	defer func() {
@@ -269,6 +274,12 @@ func (q *Rmq) TryRetry(ctx context.Context, msg *Message) (err error) {
 	retry := msg.Meta.Retry[0]
 	retry++
 	index := retry - 1
+
+	// 这样就不怕忘了设置规则了
+	if len(msg.Meta.RetryRule) == 0 {
+		msg.Meta.RetryRule = DefaultRetryRule
+	}
+
 	if index >= len(msg.Meta.RetryRule) {
 		index = len(msg.Meta.RetryRule) - 1 // 没有规则取最后一个
 	}

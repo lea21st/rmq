@@ -48,7 +48,7 @@ func (t *TestTask) TaskName() string {
 	return "TestTask"
 }
 
-func (t *TestTask) Run(ctx context.Context) (result any, err error) {
+func (t *TestTask) Run(ctx context.Context) (result string, err error) {
 	fmt.Println("xxxxx", t.Val, t.Name)
 	panic("Run")
 	return "fail", fmt.Errorf("error")
