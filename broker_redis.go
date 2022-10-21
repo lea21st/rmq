@@ -51,7 +51,7 @@ func (r *RedisBroker) Decode(bytes []byte) (msg *Message, err error) {
 }
 
 // Push 批量写入消息
-func (r *RedisBroker) Push(ctx context.Context, msg ...*Message) (v int64, err error) {
+func (r *RedisBroker) Push(ctx context.Context, msg ...*Message) (err error) {
 	var delayMessages []*redis.Z
 	var messages []interface{}
 	for i, v := range msg {
@@ -67,16 +67,13 @@ func (r *RedisBroker) Push(ctx context.Context, msg ...*Message) (v int64, err e
 	}
 
 	if len(delayMessages) > 0 {
-		v1, err1 := r.redis.ZAdd(ctx, r.config.DelayKey, delayMessages...).Result()
-		v += v1
-		if err1 != nil {
+		if _, err1 := r.redis.ZAdd(ctx, r.config.DelayKey, delayMessages...).Result(); err1 != nil {
 			err = err1
 		}
 	}
+
 	if len(messages) > 0 {
-		v2, err2 := r.redis.RPush(ctx, r.config.Key, messages...).Result()
-		v += v2
-		if err2 != nil {
+		if _, err2 := r.redis.RPush(ctx, r.config.Key, messages...).Result(); err2 != nil {
 			err = err2
 		}
 	}
@@ -95,7 +92,7 @@ func (r *RedisBroker) Pop(ctx context.Context) (msg *Message, err error) {
 	}
 
 	if msg, err = r.Decode([]byte(data)); err != nil {
-		err = fmt.Errorf("消息%s解析失败:%s", data, err)
+		err = fmt.Errorf("failed to decode task message: %s, Data: %s", err, data)
 		return
 	}
 	return
@@ -125,7 +122,7 @@ func (r *RedisBroker) AfterStart(ctx context.Context) error {
 						Count:  10,
 					}).Result(); err != nil || len(members) == 0 {
 						if err != nil {
-							r.log.Errorf("获取队列(%s)数据异常,%s", r.config.DelayKey, err)
+							r.log.Errorf("failed to get message from broker: %s", err)
 						}
 						time.Sleep(r.config.DelayWaitDuration)
 						return
@@ -134,7 +131,7 @@ func (r *RedisBroker) AfterStart(ctx context.Context) error {
 					for _, v := range members {
 						if r.redis.ZRem(ctx, r.config.DelayKey, v.Member).Val() > 0 {
 							if _, err = r.redis.RPush(ctx, r.config.Key, v.Member.(string)).Result(); err != nil {
-								r.log.Errorf("队列数据写入失败:%s,Data: %s", err, v.Member)
+								r.log.Errorf("failed to push message to redis broker: %s, Data: %s", err, v.Member)
 							}
 						}
 					}
@@ -146,11 +143,11 @@ func (r *RedisBroker) AfterStart(ctx context.Context) error {
 }
 
 func (r *RedisBroker) BeforeExit(ctx context.Context) error {
-	r.log.Infof("RedisBroker 正在退出")
+	r.log.Infof("RedisBroker exiting")
 	return nil
 }
 
 func (r *RedisBroker) AfterExit(ctx context.Context) error {
-	r.log.Infof("RedisBroker 已经退出")
+	r.log.Infof("RedisBroker exited")
 	return nil
 }

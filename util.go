@@ -1,6 +1,7 @@
 package rmq
 
 import (
+	"encoding/json"
 	"fmt"
 	"path"
 	"runtime"
@@ -18,12 +19,17 @@ func Protect(f func() error) (err error) {
 			}
 			switch e := errX.(type) {
 			case runtime.Error: // 运行时错误
-				err = fmt.Errorf("%s runtime error: %s", str, e.Error())
+				err = fmt.Errorf("runtime error %s %s", str, e.Error())
 			default: // 非运行时错误
-				err = fmt.Errorf("%s panic error: %v", str, e)
+				err = fmt.Errorf("panic error %s %v", str, e)
 			}
 		}
 	}()
 	err = f()
 	return
+}
+
+func Json(v any) string {
+	data, _ := json.Marshal(v)
+	return string(data)
 }

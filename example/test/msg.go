@@ -29,16 +29,19 @@ type TestTask struct {
 
 func (t *TestTask) OnSuccess(ctx context.Context) {
 	fmt.Println(t.Name, "success hook")
+	panic("OnSuccess")
 }
 
 func (t *TestTask) OnFail(ctx context.Context) {
 	// TODO implement me
 	fmt.Println(t.Name, "Fail hook")
+	panic("panic OnFail")
 }
 
 func (t *TestTask) OnComplete(ctx context.Context) {
 	// TODO implement me
 	fmt.Println(t.Name, "Complete hook")
+	panic("OnComplete")
 }
 
 func (t *TestTask) TaskName() string {

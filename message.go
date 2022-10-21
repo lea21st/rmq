@@ -1,7 +1,6 @@
 package rmq
 
 import (
-	"context"
 	"encoding/json"
 	"time"
 
@@ -122,9 +121,4 @@ func (m *Message) TryRetry(delay time.Duration) *Message {
 func (m *Message) String() string {
 	data, _ := json.Marshal(m)
 	return string(data)
-}
-
-func (m *Message) Push(ctx context.Context, q *Rmq) (err error) {
-	_, err = q.Push(ctx, m)
-	return
 }

@@ -28,15 +28,15 @@ type OnLoad interface {
 
 // OnSuccess 执行成功时执行的方法
 type OnSuccess interface {
-	Success(ctx context.Context)
+	OnSuccess(ctx context.Context)
 }
 
 // OnFail 执行失败时执行的方法
 type OnFail interface {
-	Fail(ctx context.Context)
+	OnFail(ctx context.Context)
 }
 
 // OnComplete 执行完成时会调用
 type OnComplete interface {
-	Complete(ctx context.Context)
+	OnComplete(ctx context.Context)
 }

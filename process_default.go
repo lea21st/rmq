@@ -6,18 +6,19 @@ import (
 	"fmt"
 )
 
-type DefaultProcess struct {
+type defaultProcess struct {
 	*Register
+	log Logger
 }
 
-func NewDefaultProcess() *DefaultProcess {
-	return &DefaultProcess{Register: register}
+func newDefaultProcess(log Logger) *defaultProcess {
+	return &defaultProcess{Register: register, log: log}
 }
 
-func (p *DefaultProcess) Exec(ctx context.Context, run *TaskRuntime) (err error) {
+func (p *defaultProcess) Exec(ctx context.Context, run *TaskRuntime) (err error) {
 	msg := run.Msg
 	if msg == nil {
-		err = fmt.Errorf("无法识别的任务")
+		err = fmt.Errorf("null message")
 		return
 	}
 
@@ -31,12 +32,12 @@ func (p *DefaultProcess) Exec(ctx context.Context, run *TaskRuntime) (err error)
 	if !taskInfo.IsCallback {
 		if impl, ok := task.(TaskScanner); ok {
 			if err = impl.Scan(msg.Data); err != nil {
-				err = fmt.Errorf("scan error: %s", err)
+				err = fmt.Errorf("failed to decode task message: %s", err)
 				return
 			}
 		} else {
 			if err = json.Unmarshal(run.Msg.Data, task); err != nil {
-				err = fmt.Errorf("scan error: %s", err)
+				err = fmt.Errorf("failed to unmarshal message: %s", err)
 				return
 			}
 		}
@@ -51,20 +52,35 @@ func (p *DefaultProcess) Exec(ctx context.Context, run *TaskRuntime) (err error)
 
 	// 执行
 	if run.Result, err = task.Run(ctx); err != nil {
-		err = fmt.Errorf("task run error: %s", err)
+		err = fmt.Errorf("failed to run %s: %s", task.TaskName(), err)
 	}
 
 	// 执行成功事件
 	if impl, ok := task.(OnSuccess); ok && err == nil {
-		impl.Success(ctx)
+		if errX := Protect(func() error {
+			impl.OnSuccess(ctx)
+			return nil
+		}); errX != nil {
+			p.log.Errorf("failed to run %s.OnSuccess, Id:%s, Error:%s", msg.Task, msg.Id, errX)
+		}
 	}
 	// 执行失败事件
-	if impl, ok := task.(OnFail); ok && err == nil {
-		impl.Fail(ctx)
+	if impl, ok := task.(OnFail); ok && err != nil {
+		if errX := Protect(func() error {
+			impl.OnFail(ctx)
+			return nil
+		}); errX != nil {
+			p.log.Errorf("failed to run %s.OnFail, Id:%s, Error:%s", msg.Task, msg.Id, errX)
+		}
 	}
 	// 执行完成事件
-	if impl, ok := task.(OnComplete); ok && err == nil {
-		impl.Complete(ctx)
+	if impl, ok := task.(OnComplete); ok {
+		if errX := Protect(func() error {
+			impl.OnComplete(ctx)
+			return nil
+		}); errX != nil {
+			p.log.Errorf("failed to run %s.OnComplete, Id:%s, Error:%s", msg.Task, msg.Id, errX)
+		}
 	}
 	return
 }

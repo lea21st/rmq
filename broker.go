@@ -9,7 +9,7 @@ type Broker interface {
 	Encode(*Message) ([]byte, error)
 	Decode(bytes []byte) (msg *Message, err error)
 
-	Push(context.Context, ...*Message) (int64, error)
+	Push(context.Context, ...*Message) error
 	Pop(ctx context.Context) (msg *Message, err error)
 }
 

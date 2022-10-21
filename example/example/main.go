@@ -48,13 +48,12 @@ func Init() {
 
 	queue.Hook.OnRun(func(ctx context.Context, r *rmq.TaskRuntime) error {
 		fmt.Println("任务开始:", runtime.NumGoroutine())
-		panic("rmq onRun")
 		return nil
 	})
 
 	queue.Hook.OnComplete(func(ctx context.Context, r *rmq.TaskRuntime) error {
 		fmt.Println("任务结束:", runtime.NumGoroutine())
-		panic("rmq OnComplete")
+		fmt.Println(rmq.Json(r))
 		return nil
 	})
 

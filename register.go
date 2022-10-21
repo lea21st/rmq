@@ -19,7 +19,7 @@ var register = &Register{
 func (r *Register) CreateTask(name string) (task Task, v *TaskInfo, err error) {
 	var ok bool
 	if v, ok = r.cache[name]; !ok {
-		err = fmt.Errorf("任务%s未注册", name)
+		err = fmt.Errorf("task %s is not registered", name)
 		return
 	}
 	if v.IsCallback {
@@ -27,7 +27,7 @@ func (r *Register) CreateTask(name string) (task Task, v *TaskInfo, err error) {
 		return
 	}
 	if task, ok = reflect.New(v.ReflectType).Interface().(Task); !ok {
-		err = fmt.Errorf("任务%s不是一个有效的Task", name)
+		err = fmt.Errorf("%s is not a valid task", name)
 		return
 	}
 	return

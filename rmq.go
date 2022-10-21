@@ -38,7 +38,7 @@ type Rmq struct {
 func NewRmq(broker Broker, logger Logger) *Rmq {
 	rmq := &Rmq{
 		broker:   broker,
-		process:  NewDefaultProcess(),
+		process:  newDefaultProcess(logger),
 		Hook:     &Hook{},
 		workerWg: sync.WaitGroup{},
 		log:      logger,
@@ -104,7 +104,7 @@ func (q *Rmq) StartWorker(c *WorkerConfig) {
 			defer func() {
 				if err := recover(); err != nil {
 					debug.PrintStack()
-					log.Printf("任务异常:%s,将在%s后重启", err, time.Minute)
+					log.Printf("worker exception:%s, will restart after %s", err, time.Minute)
 					// 等一会重启
 					time.AfterFunc(time.Minute, func() {
 						q.startWorker(ctx, workerId)
@@ -155,114 +155,121 @@ func (q *Rmq) startWorker(ctx context.Context, workerId int) {
 
 // Exit 退出
 func (q *Rmq) Exit() {
-	q.log.Infof("rmq 开始退出")
+	q.log.Infof("rmq exiting")
 
 	// broker
 	if impl, ok := q.broker.(BrokerBeforeExit); ok {
 		if err := Protect(func() error {
 			return impl.BeforeExit(context.TODO())
 		}); err != nil {
-			q.log.Errorf("BrokerBeforeExit 执行失败,err:%s", err)
+			q.log.Errorf("BrokerBeforeExit execution failed, error:%s", err)
 		}
 	}
 
 	q.exitFunc()
-	q.log.Infof("rmq 已停止消费消息")
+	q.log.Infof("rmq stopped receiving messages")
 	for len(q.concurrentChan) > 0 {
-		q.log.Infof("rmq 正在等待%d个任务执行结束", len(q.concurrentChan))
+		q.log.Infof("rmq waiting for %s task to finish execution", len(q.concurrentChan))
 		time.Sleep(time.Second)
 	}
 	q.workerWg.Wait()
-	q.log.Infof("rmq 所有任务均已执行完成")
+	q.log.Infof("rmq all tasks have been completed")
 
 	// broker
 	if impl, ok := q.broker.(BrokerAfterExit); ok {
 		if err := Protect(func() error {
 			return impl.AfterExit(context.TODO())
 		}); err != nil {
-			q.log.Errorf("BrokerBeforeExit 执行失败,err:%s", err)
+			q.log.Errorf("BrokerBeforeExit run failed, err:%s", err)
 		}
 	}
-	q.log.Infof("rmq 退出成功")
+	q.log.Infof("rmq exited")
 }
 
 // Push 写入消息到队列
-func (q *Rmq) Push(ctx context.Context, msg ...*Message) (v int64, err error) {
+func (q *Rmq) Push(ctx context.Context, msg ...*Message) (err error) {
 	if q.Hook.onPush != nil {
 		if msg, err = q.Hook.onPush(ctx, msg...); err != nil {
 			return
 		}
 	}
-	v, err = q.broker.Push(ctx, msg...)
+	err = q.broker.Push(ctx, msg...)
 	return
 }
 
 // TryRun 解析消息，执行
 func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
-	taskRuntime := NewTaskRuntime(msg)
+	taskRuntime := newTaskRuntime(msg)
 	taskRuntime.StartTime = time.Now()
-	q.log.Infof("任务%s开始执行, Id:%s,Data: %s", msg.Task, msg.Id, string(msg.Data))
+	q.log.Infof("%s start execution, Id:%s, Data: %s", msg.Task, msg.Id, string(msg.Data))
 
-	// 完成 hook
 	defer func() {
-		// complete Hook
+		// Rmq.Complete Hook
 		if q.Hook.onComplete != nil {
 			if err := Protect(func() error {
 				return q.Hook.onComplete(ctx, taskRuntime)
 			}); err != nil {
-				q.log.Errorf("Hook.onComplete 执行失败,Id: %s, Error: %s", msg.Id, err)
+				q.log.Errorf("failed to run Rmq.Hook.onComplete,Id: %s, Error: %s", msg.Id, err)
 			}
 		}
 	}()
 
 	defer func() {
+		// statistical data
 		taskRuntime.EndTime = time.Now()
 		taskRuntime.Duration = taskRuntime.EndTime.Sub(taskRuntime.StartTime)
 	}()
 
-	// 失败重试
+	// Judge whether it is expired. Please do not retry
+	if msg.ExpiredAt < Now() {
+		taskRuntime.TaskError = fmt.Errorf("task %s(%s) is expired on %s", msg.Task, msg.Id, msg.ExpiredAt.DateTime())
+		q.log.Errorf("failed to run %s, id:%s, error: %s", msg.Task, msg.Id, taskRuntime.TaskError)
+		taskRuntime.Error = taskRuntime.TaskError
+		return
+	}
+
 	defer func() {
-		// 失败重试
+		// If failed, retry
 		if taskRuntime.TaskError != nil {
-			taskRuntime.Error = taskRuntime.TaskError
-			// 重试
 			if taskRuntime.Error = q.TryRetry(ctx, msg); taskRuntime.Error != nil {
-				q.log.Errorf("任务%s[%d/%d]重试失败, Id:%s, Error:%s", msg.Task, msg.Meta.Retry[0], msg.Meta.Retry[1], msg.Id, taskRuntime.Error)
+				q.log.Errorf("%s[%d/%d] retry failed, id:%s, error:%s", msg.Task, msg.Meta.Retry[0], msg.Meta.Retry[1], msg.Id, taskRuntime.Error)
 			} else {
-				q.log.Infof("任务%s[%d/%d]重试成功,Id:%s, 将在%s开始重试", msg.Task, msg.Meta.Retry[0], msg.Meta.Retry[1], msg.Id, msg.RunAt.DateTime())
+				q.log.Infof("%s[%d/%d] retry succeeded, id:%s, will retry on %s", msg.Task, msg.Meta.Retry[0], msg.Meta.Retry[1], msg.Id, msg.RunAt.DateTime())
 			}
 		}
 	}()
 
+	// Rmq.Hook.onContext
 	if q.Hook.onContext != nil {
 		if err := Protect(func() error {
 			ctx = q.Hook.onContext(ctx, taskRuntime)
 			return nil
 		}); err != nil {
-			q.log.Errorf("Hook.onContext 执行失败, Id: %s, Error: %s", msg.Id, err)
+			q.log.Errorf("failed to run Rmq.Hook.onContext, id: %s, error: %s", msg.Id, err)
 		}
 	}
 
-	// run Hook ,注意执行失败，将不加继续执行下去
+	//  Rmq.Hook.onRun ,注意执行失败，将不加继续执行下去
 	if q.Hook.onRun != nil {
 		if err := Protect(func() error {
 			return q.Hook.onRun(ctx, taskRuntime)
 		}); err != nil {
 			taskRuntime.TaskError = err // 这个也需要重试
-			q.log.Errorf("Hook.onRun 执行失败，任务将取消执行, Id: %s,Error: %s", msg.Id, err)
+			taskRuntime.Error = err
+			q.log.Errorf("failed to run Rmq.Hook.onRun, the task %s will be canceled, id: %s, error: %s", msg.Task, msg.Id, err)
 			return
 		}
 	}
 
-	// 执行
+	// run
 	if taskRuntime.TaskError = Protect(func() error {
 		return q.process.Exec(ctx, taskRuntime)
 	}); taskRuntime.TaskError != nil {
-		return
+		taskRuntime.Error = taskRuntime.TaskError
+		q.log.Errorf("failed to run %s, id:%s, error: %s", msg.Task, msg.Id, taskRuntime.TaskError)
+	} else {
+		q.log.Infof("the %s executed successfully, id:%s, result: %s", msg.Task, msg.Id, taskRuntime.Result)
 	}
-
-	q.log.Infof("任务%s执行成功, Id:%s, Result: %s", msg.Task, msg.Id, taskRuntime.Result)
-
 }
 
 // TryRetry 尝试重试
@@ -293,7 +300,7 @@ func (q *Rmq) TryRetry(ctx context.Context, msg *Message) (err error) {
 	}
 
 	// 成功后更新重试次数
-	if _, err = q.Push(ctx, msg); err != nil {
+	if err = q.Push(ctx, msg); err != nil {
 		msg.Meta.Retry[0] = retry
 	}
 	return
