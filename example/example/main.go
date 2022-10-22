@@ -16,8 +16,8 @@ var queue *rmq.Rmq
 func main() {
 	Init()
 	queue.StartWorker(&rmq.WorkerConfig{
-		WorkerNum:  2,
-		Concurrent: 2,
+		WorkerNum:  20,  // 多pod环境建议1
+		Concurrent: 200, // 不建议太大
 	})
 	// defer queue.Exit()
 

@@ -169,7 +169,7 @@ func (q *Rmq) Exit() {
 	q.exitFunc()
 	q.log.Infof("rmq stopped receiving messages")
 	for len(q.concurrentChan) > 0 {
-		q.log.Infof("rmq waiting for %s task to finish execution", len(q.concurrentChan))
+		q.log.Infof("rmq wait for the %d tasks to complete", len(q.concurrentChan))
 		time.Sleep(time.Second)
 	}
 	q.workerWg.Wait()
@@ -201,7 +201,7 @@ func (q *Rmq) Push(ctx context.Context, msg ...*Message) (err error) {
 func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 	taskRuntime := newTaskRuntime(msg)
 	taskRuntime.StartTime = time.Now()
-	q.log.Infof("%s start execution, Id:%s, Data: %s", msg.Task, msg.Id, string(msg.Data))
+	q.log.Infof("task %s starts running, Id:%s, Data: %s", msg.Task, msg.Id, string(msg.Data))
 
 	defer func() {
 		// Rmq.Complete Hook
@@ -275,7 +275,7 @@ func (q *Rmq) TryRun(ctx context.Context, msg *Message) {
 // TryRetry 尝试重试
 func (q *Rmq) TryRetry(ctx context.Context, msg *Message) (err error) {
 	if msg.Meta.Retry[0] >= msg.Meta.Retry[1] {
-		err = fmt.Errorf("已达到最大重试次数[%d/%d]", msg.Meta.Retry[0], msg.Meta.Retry[1])
+		err = fmt.Errorf("the task[%d/%d] has reached the maximum number of retries", msg.Meta.Retry[0], msg.Meta.Retry[1])
 		return
 	}
 
@@ -295,7 +295,7 @@ func (q *Rmq) TryRetry(ctx context.Context, msg *Message) (err error) {
 	delay := msg.Meta.RetryRule[index]
 	msg.TryRetry(time.Duration(delay) * time.Second)
 	if msg.RunAt > msg.ExpiredAt {
-		err = fmt.Errorf("任务在下个时间点重试将过期，取消重试，过期时间%s", msg.ExpiredAt.DateTime())
+		err = fmt.Errorf("the task will expire if it is tried at the next time point. the retry is cancelled. The expiration time is %s", msg.ExpiredAt.DateTime())
 		return
 	}
 

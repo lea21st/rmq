@@ -5,30 +5,30 @@ import (
 	"fmt"
 )
 
-type FuncTask struct {
+type callbackTask struct {
 	msg      *Message
 	callback Callback
 	taskName string
 }
 
-func newFuncTask(name string, callback Callback) *FuncTask {
-	return &FuncTask{
+func newFuncTask(name string, callback Callback) *callbackTask {
+	return &callbackTask{
 		callback: callback,
 		taskName: name,
 	}
 }
-func (s *FuncTask) TaskName() string {
+func (s *callbackTask) TaskName() string {
 	return s.taskName
 }
 
-func (s *FuncTask) Load(ctx context.Context, msg *Message) error {
+func (s *callbackTask) Load(ctx context.Context, msg *Message) error {
 	s.msg = msg
 	return nil
 }
 
-func (s *FuncTask) Run(ctx context.Context) (string, error) {
+func (s *callbackTask) Run(ctx context.Context) (string, error) {
 	if s.callback == nil {
-		fmt.Println("callb", s.msg)
+		return "", fmt.Errorf("callback is null")
 	}
 	return s.callback(ctx, s.msg)
 }

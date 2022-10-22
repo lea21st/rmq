@@ -99,7 +99,6 @@ func (r *RedisBroker) Pop(ctx context.Context) (msg *Message, err error) {
 }
 
 func (r *RedisBroker) BeforeStart(ctx context.Context) error {
-	// todo
 	return nil
 }
 
@@ -143,11 +142,10 @@ func (r *RedisBroker) AfterStart(ctx context.Context) error {
 }
 
 func (r *RedisBroker) BeforeExit(ctx context.Context) error {
-	r.log.Infof("RedisBroker exiting")
 	return nil
 }
 
 func (r *RedisBroker) AfterExit(ctx context.Context) error {
-	r.log.Infof("RedisBroker exited")
+	r.log.Infof("redisBroker exited")
 	return nil
 }
