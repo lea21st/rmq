@@ -71,7 +71,8 @@ msg, err := rmq.NewMsg().SetTask(&TestTask{
     Name: "name-1",
     Val:  1,
 })
-// 消息定制
+
+// 定制消息
 msg := rmq.NewMsg() // OR msg := rmq.NewBlankMsg()
 msg.SetMeta(rmq.RetryMeta).SetDelay(3 * time.Minute).SetMaxRetry(1).SetTraceId("traceId").SetTimeout(30 * time.Second).SetExpire(30 * time.Second).SetExpiredAt(time.Now().Add(1 * time.Hour))
 
@@ -105,8 +106,8 @@ queue.Register(&TestTask{})
 ## 消费
 ```
 queue.StartWorker(&rmq.WorkerConfig{
-    WorkerNum:  2,
-    Concurrent: 2,
+    WorkerNum:  2, //多pod环境下，建议设置为1，主要影响获取消息的速度
+    Concurrent: 20, //同时执行的任务数量，多个协程并发执行任务数量
 })
 ```
 
@@ -118,7 +119,7 @@ queue.Hook.OnPush(func(ctx context.Context, msg ...*rmq.Message) ([]*rmq.Message
     return msg,nil
 })
 
-// 任务开始执行时调用，返回error将取消任务执行
+// 任务开始执行时调用，注意，返回error将取消任务执行
 queue.Hook.OnRun(func(ctx context.Context, r *rmq.TaskRuntime) error {
 	fmt.Println("任务开始:", runtime.NumGoroutine())
 	return nil
@@ -132,8 +133,8 @@ queue.Hook.OnComplete(func(ctx context.Context, r *rmq.TaskRuntime) error {
 })
 
 // 任务开始，创建Context时调用
-queue.Hook.OnContext(func(ctx context.Context, msg *rmq.TaskRuntime) context.Context {
-    return context.WithValue(ctx, "x", msg.Msg.Meta.TraceId)
+queue.Hook.OnContext(func(ctx context.Context, r *rmq.TaskRuntime) context.Context {
+    return context.WithValue(ctx, "x_trace_id", r.Msg.Meta.TraceId)
 })
 ```
 
