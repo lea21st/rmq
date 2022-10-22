@@ -7,12 +7,16 @@ import (
 )
 
 type CommandTask struct {
-	Shell    string
-	Command  []string
-	msg      *Message
-	callback func(ctx context.Context, msg *Message) error
+	Shell   string
+	Command []string
 }
 
+func NewCommandTask(shell string, command ...string) *CommandTask {
+	return &CommandTask{
+		Shell:   shell,
+		Command: command,
+	}
+}
 func (c *CommandTask) TaskName() string {
 	return "commandTask"
 }

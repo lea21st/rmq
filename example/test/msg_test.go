@@ -27,15 +27,18 @@ func TestTest(t *testing.T) {
 		// 	fmt.Printf("%s\n", err)
 		// }
 
-		msg, _ := rmq.NewMsg().SetTimeout(3 * time.Second).SetTask(&TestTask{
-			Name: fmt.Sprintf("testTask-%d", i),
-			Val:  i * i,
-		})
-		_ = queue.Push(ctx, msg)
+		// msg, _ := rmq.NewMsg().SetTimeout(3 * time.Second).SetTask(&TestTask{
+		// 	Name: fmt.Sprintf("testTask-%d", i),
+		// 	Val:  i * i,
+		// })
+		// _ = queue.Push(ctx, msg)
 
 		// msg, _ = rmq.NewHttpTaskJsonPost("https://www.baidu.com/s?ie=UTF-8&wd=baidu", map[string]any{}).Message()
 		// _, _ = queue.Push(ctx, msg)
 		// msg, _ := rmq.NewHttpTaskGet("https://www.baidu.com/s?ie=UTF-8&wd=%d", i).Message()
 		// _, _ = queue.Push(ctx, msg)
+
+		msg, _ := rmq.NewMsg().SetTimeout(3 * time.Second).SetTask(rmq.NewCommandTask("sh", "cd /tmp", "ls -ash"))
+		_ = queue.Push(ctx, msg)
 	}
 }
