@@ -13,21 +13,21 @@
 ```
 // Test1 ,仅一个函数
 func Test1(ctx context.Context, msg *rmq.Message) (result string, err error) {
-	return
+    return
 }
 
 // TestTask，实现 rmq.Task
 type TestTask struct {
-	Name string `json:"name"`
-	Val  int    `json:"val"`
+    Name string `json:"name"`
+    Val  int    `json:"val"`
 }
 func (t *TestTask) TaskName() string {
-	// TODO implement me
-	return "TestTask"
+    // TODO implement me
+    return "TestTask"
 }
 
 func (t *TestTask) Run(ctx context.Context) (result string, err error) {
-	return "ok", nil
+    return "ok", nil
 }
 
 // 自带的Task
@@ -122,8 +122,8 @@ queue.Hook.OnPush(func(ctx context.Context, msg ...*rmq.Message) ([]*rmq.Message
 
 // 任务开始执行时调用，注意，返回error将取消任务执行
 queue.Hook.OnRun(func(ctx context.Context, r *rmq.TaskRuntime) error {
-	fmt.Println("任务开始:", runtime.NumGoroutine())
-	return nil
+    fmt.Println("任务开始:", runtime.NumGoroutine())
+    return nil
 })
 
 // 任务执行完成时调用
@@ -142,16 +142,16 @@ queue.Hook.OnContext(func(ctx context.Context, r *rmq.TaskRuntime) context.Conte
 ## Task Hook
 ```
 func (t *TestTask) OnSuccess(ctx context.Context) {
-	fmt.Println(t.Name, "Success hook")
+    fmt.Println(t.Name, "Success hook")
 }
 
 func (t *TestTask) OnFail(ctx context.Context) {
-	// TODO implement me
-	fmt.Println(t.Name, "Fail hook")
+    // TODO implement me
+    fmt.Println(t.Name, "Fail hook")
 }
 
 func (t *TestTask) OnComplete(ctx context.Context) {
-	// TODO implement me
-	fmt.Println(t.Name, "Complete hook")
+    // TODO implement me
+    fmt.Println(t.Name, "Complete hook")
 }
 ```
