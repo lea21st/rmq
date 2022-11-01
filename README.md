@@ -6,9 +6,9 @@
 
 ## Import
 
-`go get github.com/lea21st/rmq`
+`go get github.com/lpong/rmq`
 
-[https://github.com/lea21st/rmq](https://github.com/lea21st/rmq) 欢迎提交 Issues 和 Pull Requests
+[https://github.com/lpong/rmq](https://github.com/lpong/rmq) 欢迎提交 Issues 和 Pull Requests
 ## 创建Task
 ```
 // Test1 ,仅一个函数
