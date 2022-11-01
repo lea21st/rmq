@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lea21st/rmq"
+	"github.com/lpong/rmq"
 )
 
 func TestTest(t *testing.T) {
@@ -15,7 +15,7 @@ func TestTest(t *testing.T) {
 	data, _ := json.Marshal(queue.Tasks())
 	fmt.Println(string(data))
 	ctx := context.TODO()
-	for i := 1; i < 100; i++ {
+	for i := 1; i < 10000000; i++ {
 		if msg, err := rmq.NewMsg().SetCallback(fmt.Sprintf("test%d", i%2+1), map[string]any{
 			"a": 1,
 			"b": 2,

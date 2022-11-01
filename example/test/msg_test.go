@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lea21st/rmq"
+	"github.com/lpong/rmq"
 )
 
 func TestTest(t *testing.T) {

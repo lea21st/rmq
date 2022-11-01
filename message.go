@@ -13,9 +13,9 @@ type Message struct {
 	Id        string          `json:"id"`
 	Task      string          `json:"task"`
 	Data      json.RawMessage `json:"data"`
-	RunAt     Millisecond     `json:"run_at"`     // 应执行时间
-	ExpiredAt Millisecond     `json:"expired_at"` // 过期时间
-	CreatedAt Millisecond     `json:"created_at"` // 创建时间
+	RunAt     Timestamp       `json:"run_at"`     // 应执行时间
+	ExpiredAt Timestamp       `json:"expired_at"` // 过期时间
+	CreatedAt Timestamp       `json:"created_at"` // 创建时间
 	Meta      Meta            `json:"meta,omitempty"`
 }
 
@@ -93,7 +93,7 @@ func (m *Message) SetDelay(delay time.Duration) *Message {
 }
 
 func (m *Message) SetExpiredAt(t time.Time) *Message {
-	m.ExpiredAt = CreateMillisecond(t)
+	m.ExpiredAt = NewTimestamp(t)
 	return m
 }
 

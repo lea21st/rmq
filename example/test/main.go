@@ -8,7 +8,7 @@ import (
 	"runtime"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/lea21st/rmq"
+	"github.com/lpong/rmq"
 )
 
 var queue *rmq.Rmq

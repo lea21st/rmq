@@ -26,18 +26,16 @@ var DefaultRedisBrokerConfig = RedisBrokerConfig{
 }
 
 type RedisBroker struct {
-	redis    *redis.Client
-	config   RedisBrokerConfig
-	log      Logger
-	exitChan chan int
+	redis  *redis.Client
+	config RedisBrokerConfig
+	log    Logger
 }
 
 func NewRedisBroker(rd *redis.Client, c RedisBrokerConfig, log Logger) *RedisBroker {
 	return &RedisBroker{
-		redis:    rd,
-		config:   c,
-		log:      log,
-		exitChan: make(chan int),
+		redis:  rd,
+		config: c,
+		log:    log,
 	}
 }
 
@@ -146,6 +144,5 @@ func (r *RedisBroker) BeforeExit(ctx context.Context) error {
 }
 
 func (r *RedisBroker) AfterExit(ctx context.Context) error {
-	r.log.Infof("redisBroker exited")
 	return nil
 }

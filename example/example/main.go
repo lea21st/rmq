@@ -8,7 +8,7 @@ import (
 	"runtime"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/lea21st/rmq"
+	"github.com/lpong/rmq"
 )
 
 var queue *rmq.Rmq
@@ -16,8 +16,8 @@ var queue *rmq.Rmq
 func main() {
 	Init()
 	queue.StartWorker(&rmq.WorkerConfig{
-		WorkerNum:  20,  // 多pod环境建议1
-		Concurrent: 200, // 不建议太大
+		WorkerNum:  200,   // 多pod环境建议1, 对就是1
+		Concurrent: 20000, // 不建议太大
 	})
 	// defer queue.Exit()
 

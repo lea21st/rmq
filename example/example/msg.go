@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/lea21st/rmq"
+	"github.com/lpong/rmq"
 )
 
 func Test1(ctx context.Context, msg *rmq.Message) (result string, err error) {

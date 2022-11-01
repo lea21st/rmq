@@ -121,6 +121,7 @@ func (q *Rmq) StartWorker(c *WorkerConfig) {
 			q.log.Errorf("broker after start hook exec fail ,err:%s", err)
 		}
 	}
+	fmt.Printf("Rmq Started, workerNum:%d\n", c.WorkerNum)
 }
 
 func (q *Rmq) startWorker(ctx context.Context, workerId int) {

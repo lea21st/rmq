@@ -1,4 +1,4 @@
-module github.com/lea21st/rmq
+module github.com/lpong/rmq
 
 go 1.18
 
