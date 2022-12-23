@@ -301,8 +301,6 @@ func (q *Rmq) TryRetry(ctx context.Context, msg *Message) (err error) {
 	}
 
 	// 成功后更新重试次数
-	if err = q.Push(ctx, msg); err != nil {
-		msg.Meta.Retry[0] = retry
-	}
+	err = q.Push(ctx, msg)
 	return
 }

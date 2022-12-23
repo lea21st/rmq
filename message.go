@@ -54,8 +54,8 @@ func (m *Message) SetTask(task Task) (message *Message, err error) {
 	return
 }
 
-func (m *Message) SetCallback(callbackName string, data any) (msg *Message, err error) {
-	m.Task = callbackName
+func (m *Message) SetRawTask(name string, data any) (msg *Message, err error) {
+	m.Task = name
 	m.Data, err = json.Marshal(data)
 	msg = m
 	return
@@ -113,6 +113,7 @@ func (m *Message) SetTraceId(traceId string) *Message {
 }
 
 func (m *Message) TryRetry(delay time.Duration) *Message {
+	m.Meta.Retry[0] += 1
 	m.Meta.Delay = int(delay.Seconds())
 	m.RunAt = Now().Add(delay)
 	return m

@@ -16,7 +16,7 @@ func TestTest(t *testing.T) {
 	fmt.Println(string(data))
 	ctx := context.TODO()
 	for i := 1; i < 2; i++ {
-		// if msg, err := rmq.NewMsg().SetCallback(fmt.Sprintf("test%d", i%2+1), map[string]any{
+		// if msg, err := rmq.NewMsg().SetRawTask(fmt.Sprintf("test%d", i%2+1), map[string]any{
 		// 	"a": 1,
 		// 	"b": 2,
 		// }); err != nil {

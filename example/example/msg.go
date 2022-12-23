@@ -47,5 +47,5 @@ func (t *TestTask) TaskName() string {
 }
 
 func (t *TestTask) Run(ctx context.Context) (result string, err error) {
-	return "ok", nil
+	return "fail", fmt.Errorf("fail")
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/lpong/rmq"
 )
@@ -15,8 +14,8 @@ func TestTest(t *testing.T) {
 	data, _ := json.Marshal(queue.Tasks())
 	fmt.Println(string(data))
 	ctx := context.TODO()
-	for i := 1; i < 10000000; i++ {
-		if msg, err := rmq.NewMsg().SetCallback(fmt.Sprintf("test%d", i%2+1), map[string]any{
+	for i := 1; i < 2; i++ {
+		if msg, err := rmq.NewMsg().SetRawTask(fmt.Sprintf("test%d", i%2+1), map[string]any{
 			"a": 1,
 			"b": 2,
 		}); err != nil {
@@ -26,12 +25,15 @@ func TestTest(t *testing.T) {
 			fmt.Printf("%s\n", err)
 		}
 
-		msg, _ := rmq.NewMsg().SetTimeout(3 * time.Second).SetTask(&TestTask{
-			Name: fmt.Sprintf("testTask-%d", i),
-			Val:  i * i,
-		})
+		// msg, _ := rmq.NewMsg().SetTimeout(3 * time.Second).SetTask(&TestTask{
+		// 	Name: fmt.Sprintf("testTask-%d", i),
+		// 	Val:  i * i,
+		// })
+		// msg.SetMaxRetry(3)
+		// msg.SetExpire(3 * time.Second)
+		// msg.SetRetryRule([]int{10, 11, 12, 13})
 
-		_ = queue.Push(ctx, msg)
+		// _ = queue.Push(ctx, msg)
 
 		// msg, _ = rmq.NewHttpTaskJsonPost("https://www.baidu.com/s?ie=UTF-8&wd=baidu", map[string]any{}).Message()
 		// _, _ = queue.Push(ctx, msg)
