@@ -78,7 +78,7 @@ msg := rmq.NewMsg() // OR msg := rmq.NewBlankMsg()
 msg.SetMeta(rmq.RetryMeta).SetDelay(3 * time.Minute).SetMaxRetry(1).SetTraceId("traceId").SetTimeout(30 * time.Second).SetExpire(30 * time.Second).SetExpiredAt(time.Now().Add(1 * time.Hour))
 
 // 该消息要执行的任务
-msg.SetCallback("test1", map[string]any{"x": 1})
+msg.SetRawTask("test1", map[string]any{"x": 1})
 // or 
 msg.SetTask(&TestTask{
     Name: fmt.Sprintf("testTask-%d", i),
