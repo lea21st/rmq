@@ -47,5 +47,13 @@ func (t *TestTask) TaskName() string {
 }
 
 func (t *TestTask) Run(ctx context.Context) (result string, err error) {
-	return "fail", fmt.Errorf("fail")
+	Test()
+	return
+}
+
+func Test() {
+	x := make([]int, 1)
+	for i := 0; i < 100; i++ {
+		fmt.Println(x[i])
+	}
 }
